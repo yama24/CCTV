@@ -206,35 +206,30 @@ class CCTVCamera {
                 console.log('WebRTC method failed:', rtcError);
             }
             
-            // Method 2: Try to get hostname from location.hostname (works for some setups)
-            if (location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                deviceName = location.hostname;
-            } else {
-                // Method 2: Parse User Agent for device information
-                const userAgent = navigator.userAgent;
-                
-                // Extract device info from user agent patterns
-                if (userAgent.includes('Windows NT')) {
-                    const match = userAgent.match(/Windows NT ([\d.]+)/);
-                    deviceName = match ? `Windows-${match[1]}-Device` : 'Windows-Device';
-                } else if (userAgent.includes('Macintosh')) {
-                    const match = userAgent.match(/Mac OS X ([\d_]+)/);
-                    deviceName = match ? `Mac-${match[1].replace(/_/g, '.')}-Device` : 'Mac-Device';
-                } else if (userAgent.includes('Linux')) {
-                    deviceName = 'Linux-Device';
-                } else if (userAgent.includes('Android')) {
-                    const match = userAgent.match(/Android ([\d.]+)/);
-                    deviceName = match ? `Android-${match[1]}-Device` : 'Android-Device';
-                } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
-                    const match = userAgent.match(/OS ([\d_]+)/);
-                    deviceName = match ? `iOS-${match[1].replace(/_/g, '.')}-Device` : 'iOS-Device';
-                }
-                
-                // Try to add more specific device info if available
-                const platform = navigator.platform;
-                if (platform) {
-                    deviceName = `${platform}-${deviceName}`;
-                }
+            // Method 2: Parse User Agent for device information (no domain/hostname)
+            const userAgent = navigator.userAgent;
+            
+            // Extract device info from user agent patterns
+            if (userAgent.includes('Windows NT')) {
+                const match = userAgent.match(/Windows NT ([\d.]+)/);
+                deviceName = match ? `Windows-${match[1]}-Device` : 'Windows-Device';
+            } else if (userAgent.includes('Macintosh')) {
+                const match = userAgent.match(/Mac OS X ([\d_]+)/);
+                deviceName = match ? `Mac-${match[1].replace(/_/g, '.')}-Device` : 'Mac-Device';
+            } else if (userAgent.includes('Linux')) {
+                deviceName = 'Linux-Device';
+            } else if (userAgent.includes('Android')) {
+                const match = userAgent.match(/Android ([\d.]+)/);
+                deviceName = match ? `Android-${match[1]}-Device` : 'Android-Device';
+            } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                const match = userAgent.match(/OS ([\d_]+)/);
+                deviceName = match ? `iOS-${match[1].replace(/_/g, '.')}-Device` : 'iOS-Device';
+            }
+            
+            // Try to add more specific device info if available
+            const platform = navigator.platform;
+            if (platform && !deviceName.includes(platform)) {
+                deviceName = `${platform}-${deviceName}`;
             }
             
             return deviceName;
