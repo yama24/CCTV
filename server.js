@@ -14,6 +14,9 @@ const io = socketIo(server);
 // JWT secret key (in production, use environment variable)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
 
+// IMPORTANT: Trust proxy headers to prevent redirect loops
+app.set('trust proxy', 1);
+
 // Initialize database
 const db = new Database();
 
@@ -35,12 +38,17 @@ app.use((req, res, next) => {
     express.static('public')(req, res, next);
 });
 
-// Session configuration
+// Session configuration - auto-detect HTTPS when behind proxy
 app.use(session({
     secret: 'your-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+    cookie: { 
+        secure: 'auto',  // Automatically detect HTTPS
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true,
+        sameSite: 'lax'
+    }
 }));
 
 // Authentication middleware
