@@ -1,6 +1,7 @@
 class CCTVViewer {
     constructor() {
-        this.socket = io();
+        this.authToken = null;
+        this.socket = null;
         this.remoteVideo = document.getElementById('remoteVideo');
         this.disconnectBtn = document.getElementById('disconnectBtn');
         this.refreshBtn = document.getElementById('refreshCameras');
@@ -21,8 +22,69 @@ class CCTVViewer {
         this.isConnecting = false;
         
         this.initializeEventListeners();
-        this.initializeSocketListeners();
-        this.loadCameras();
+        
+        // Initialize authentication and socket connection
+        this.initializeAuthentication();
+    }
+
+    async initializeAuthentication() {
+        try {
+            // Get authentication token from server
+            const response = await fetch('/api/auth/token', {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to get authentication token');
+            }
+            
+            const data = await response.json();
+            this.authToken = data.token;
+            
+            // Initialize socket connection with authentication
+            this.socket = io({
+                auth: {
+                    token: this.authToken
+                }
+            });
+            
+            this.initializeSocketListeners();
+            this.loadCameras();
+            
+            // Set up periodic token validation (every 5 minutes)
+            setInterval(() => this.validateToken(), 5 * 60 * 1000);
+            
+        } catch (error) {
+            console.error('Authentication failed:', error);
+            alert('Authentication failed. Please log in again.');
+            window.location.href = '/login';
+        }
+    }
+
+    async validateToken() {
+        try {
+            const response = await fetch('/api/auth/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Token validation failed');
+            }
+            
+            const result = await response.json();
+            if (!result.valid) {
+                throw new Error('Token is no longer valid');
+            }
+            
+        } catch (error) {
+            console.error('Token validation failed:', error);
+            alert('Your session has expired. Please log in again.');
+            window.location.href = '/login';
+        }
     }
 
     initializeEventListeners() {
@@ -55,6 +117,24 @@ class CCTVViewer {
             this.updateStatus('📴 Disconnected from server', 'disconnected');
             this.isConnected = false;
             this.isConnecting = false;
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection failed:', error.message);
+            if (error.message.includes('Authentication')) {
+                alert('Authentication failed. Please log in again.');
+                window.location.href = '/login';
+            } else {
+                this.updateStatus('❌ Connection failed', 'disconnected');
+            }
+        });
+
+        this.socket.on('error', (error) => {
+            console.error('Socket error:', error);
+            if (error.message && error.message.includes('Authentication')) {
+                alert('Authentication failed. Please log in again.');
+                window.location.href = '/login';
+            }
         });
 
         this.socket.on('cameras-updated', (cameras) => {
@@ -101,7 +181,22 @@ class CCTVViewer {
 
     async loadCameras() {
         try {
-            const response = await fetch('/api/cameras');
+            const response = await fetch('/api/cameras', {
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`
+                },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                if (response.status === 401) {
+                    alert('Authentication failed. Please log in again.');
+                    window.location.href = '/login';
+                    return;
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const cameras = await response.json();
             this.availableCameras = cameras;
             this.renderCameraList();

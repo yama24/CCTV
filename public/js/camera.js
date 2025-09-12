@@ -1,6 +1,7 @@
 class CCTVCamera {
     constructor() {
-        this.socket = io();
+        this.authToken = null;
+        this.socket = null;
         this.localVideo = document.getElementById('localVideo');
         this.startBtn = document.getElementById('startBtn');
         this.stopBtn = document.getElementById('stopBtn');
@@ -22,10 +23,12 @@ class CCTVCamera {
         };
         
         this.initializeEventListeners();
-        this.initializeSocketListeners();
         this.initializeDefaults();
         this.loadAvailableDevices();
         this.hideVideo(); // Initially hide video until camera starts
+        
+        // Initialize authentication and socket connection
+        this.initializeAuthentication();
     }
 
     initializeEventListeners() {
@@ -54,6 +57,65 @@ class CCTVCamera {
                     this.currentDevices.audio = e.target.value;
                 }
             });
+        }
+    }
+
+    async initializeAuthentication() {
+        try {
+            // Get authentication token from server
+            const response = await fetch('/api/auth/token', {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to get authentication token');
+            }
+            
+            const data = await response.json();
+            this.authToken = data.token;
+            
+            // Initialize socket connection with authentication
+            this.socket = io({
+                auth: {
+                    token: this.authToken
+                }
+            });
+            
+            this.initializeSocketListeners();
+            
+            // Set up periodic token validation (every 5 minutes)
+            setInterval(() => this.validateToken(), 5 * 60 * 1000);
+            
+        } catch (error) {
+            console.error('Authentication failed:', error);
+            alert('Authentication failed. Please log in again.');
+            window.location.href = '/login';
+        }
+    }
+
+    async validateToken() {
+        try {
+            const response = await fetch('/api/auth/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Token validation failed');
+            }
+            
+            const result = await response.json();
+            if (!result.valid) {
+                throw new Error('Token is no longer valid');
+            }
+            
+        } catch (error) {
+            console.error('Token validation failed:', error);
+            alert('Your session has expired. Please log in again.');
+            window.location.href = '/login';
         }
     }
 
@@ -156,6 +218,24 @@ class CCTVCamera {
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
             this.updateStatus('📴 Disconnected from server', 'disconnected');
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection failed:', error.message);
+            if (error.message.includes('Authentication')) {
+                alert('Authentication failed. Please log in again.');
+                window.location.href = '/login';
+            } else {
+                this.updateStatus('❌ Connection failed', 'disconnected');
+            }
+        });
+
+        this.socket.on('error', (error) => {
+            console.error('Socket error:', error);
+            if (error.message && error.message.includes('Authentication')) {
+                alert('Authentication failed. Please log in again.');
+                window.location.href = '/login';
+            }
         });
 
         this.socket.on('viewer-requesting-offer', (data) => {
