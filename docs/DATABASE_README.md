@@ -80,36 +80,36 @@ Application configuration settings.
 ### 1. Initialize Database
 ```bash
 # Create initial admin user
-node setup-admin.js
+node scripts/setup-admin.js
 ```
 
 ### 2. Manage Users
 ```bash
 # Interactive user management
-node user-manager.js
+node scripts/user-manager.js
 
 # Quick commands
-node user-manager.js add     # Add user directly
-node user-manager.js list    # List all users
+node scripts/user-manager.js add     # Add user directly
+node scripts/user-manager.js list    # List all users
 ```
 
 ### 3. Database Maintenance
 ```bash
 # Full maintenance (recommended weekly)
-node db-maintenance.js
+node scripts/db-maintenance.js
 
 # Specific operations
-node db-maintenance.js report          # Generate statistics
-node db-maintenance.js cleanup 30      # Clean logs older than 30 days
-node db-maintenance.js sessions        # Clean expired sessions
-node db-maintenance.js vacuum          # Optimize database
+node scripts/db-maintenance.js report          # Generate statistics
+node scripts/db-maintenance.js cleanup 30      # Clean logs older than 30 days
+node scripts/db-maintenance.js sessions        # Clean expired sessions
+node scripts/db-maintenance.js vacuum          # Optimize database
 ```
 
 ## 👤 User Management
 
 ### **Adding Users**
 ```bash
-node user-manager.js
+node scripts/user-manager.js
 # Select option 1: Add new user
 # Follow the prompts to enter user details
 ```
@@ -120,14 +120,14 @@ node user-manager.js
 
 ### **Changing Passwords**
 ```bash
-node user-manager.js
+node scripts/user-manager.js
 # Select option 3: Change user password
 # Enter username and new password
 ```
 
 ### **Deactivating Users**
 ```bash
-node user-manager.js
+node scripts/user-manager.js
 # Select option 4: Delete (deactivate) user
 # User will be deactivated but data preserved
 ```

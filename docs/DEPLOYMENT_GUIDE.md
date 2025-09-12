@@ -30,7 +30,7 @@ sudo certbot --apache -d cctv.yourdomain.com
 ### 3. Configure Virtual Host
 ```bash
 # Copy the Apache configuration
-sudo cp apache2-vhost.conf /etc/apache2/sites-available/cctv.conf
+sudo cp config/apache2-vhost.conf /etc/apache2/sites-available/cctv.conf
 
 # Edit the configuration file
 sudo nano /etc/apache2/sites-available/cctv.conf
@@ -56,7 +56,7 @@ sudo certbot --nginx -d cctv.yourdomain.com
 ### 2. Configure Virtual Host
 ```bash
 # Copy the Nginx configuration
-sudo cp nginx-vhost.conf /etc/nginx/sites-available/cctv
+sudo cp config/nginx-vhost.conf /etc/nginx/sites-available/cctv
 
 # Edit the configuration file
 sudo nano /etc/nginx/sites-available/cctv

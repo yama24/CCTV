@@ -2,7 +2,7 @@
 
 // Quick setup script to create the initial admin user
 const bcrypt = require('bcrypt');
-const Database = require('./database');
+const Database = require('../database');
 
 async function createInitialAdmin() {
     console.log('🔐 Creating initial admin user...');
@@ -22,7 +22,7 @@ async function createInitialAdmin() {
         });
         
         if (existingUsers > 0) {
-            console.log('ℹ️  Users already exist. Use user-manager.js to manage users.');
+            console.log('ℹ️  Users already exist. Use scripts/user-manager.js to manage users.');
             db.close();
             return;
         }
@@ -53,7 +53,7 @@ async function createInitialAdmin() {
         console.log('');
         console.log('⚠️  SECURITY WARNING:');
         console.log('   Change the default password immediately!');
-        console.log('   Run: node user-manager.js');
+        console.log('   Run: node scripts/user-manager.js');
         console.log('   Then select option 3 to change the password.');
         console.log('');
         

@@ -29,14 +29,45 @@ A secure home CCTV system that streams video and audio using WebRTC technology. 
    npm install
    ```
 
-3. **Start the server:**
+3. **Set up initial admin user:**
+   ```bash
+   node scripts/setup-admin.js
+   ```
+
+4. **Start the server:**
    ```bash
    npm start
    ```
 
-4. **Access locally:**
+5. **Access locally:**
    - Open `http://localhost:3000` in your browser
    - Login with default credentials: `admin` / `password`
+
+## 📁 Project Structure
+
+```
+├── server.js           # Main server application
+├── database.js         # Database management
+├── package.json        # Dependencies and scripts
+├── config/            # Server configuration files
+│   ├── apache2-vhost.conf
+│   └── nginx-vhost.conf
+├── docs/              # Documentation
+│   ├── DATABASE_README.md
+│   ├── DEPLOYMENT_GUIDE.md
+│   └── ...
+├── public/            # Static web files
+│   ├── *.html        # Web pages
+│   ├── css/          # Stylesheets
+│   └── js/           # Client-side JavaScript
+├── scripts/           # Utility scripts
+│   ├── setup-admin.js     # Initialize admin user
+│   ├── user-manager.js    # Manage users
+│   └── db-maintenance.js  # Database maintenance
+└── tests/             # Testing scripts
+    ├── test-security.js
+    └── test-websocket-auth.js
+```
 
 ## 🌐 Remote Access Setup (ngrok)
 
@@ -63,7 +94,40 @@ To access your CCTV from outside your home network:
    - Use this URL to access your CCTV from anywhere
    - Share this URL only with trusted users
 
-## 📱 Usage Instructions
+## � Management Commands
+
+### User Management
+```bash
+# Interactive user management menu
+node scripts/user-manager.js
+
+# Quick commands
+node scripts/user-manager.js add    # Add user directly
+node scripts/user-manager.js list   # List all users
+```
+
+### Database Maintenance
+```bash
+# Full maintenance (recommended weekly)
+node scripts/db-maintenance.js
+
+# Generate password hash
+node scripts/generate-password.js
+
+# Create demo users for testing
+node scripts/create-demo-users.js
+```
+
+### Testing Security
+```bash
+# Test authentication endpoints
+node tests/test-security.js
+
+# Test WebSocket authentication  
+node tests/test-websocket-auth.js
+```
+
+## �📱 Usage Instructions
 
 ### Setting up Multiple Cameras
 

@@ -153,7 +153,7 @@ app.get('/api/admin/stats', requireApiAuth, (req, res) => {
 
 **Using Interactive Script:**
 ```bash
-node user-manager.js
+node scripts/user-manager.js
 # Select "1. Add new user"
 # Choose role: admin or user
 ```

@@ -2,7 +2,7 @@
 
 // Batch user creation script for quick setup
 const bcrypt = require('bcrypt');
-const Database = require('./database');
+const Database = require('../database');
 
 async function createBatchUsers() {
     console.log('👥 Creating batch users for demonstration...');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const bcrypt = require('bcrypt');
-const Database = require('./database');
+const Database = require('../database');
 const readline = require('readline');
 const prompt = require('prompt-sync')({ sigint: true });
 
@@ -397,7 +397,7 @@ if (args.length > 0) {
                 });
                 break;
             default:
-                console.log('Usage: node user-manager.js [add|list]');
+                console.log('Usage: node scripts/user-manager.js [add|list]');
                 console.log('Or run without arguments for interactive menu');
                 userManager.cleanup();
         }

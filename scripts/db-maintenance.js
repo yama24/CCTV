@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Database maintenance and cleanup script
-const Database = require('./database');
+const Database = require('../database');
 
 class DatabaseMaintenance {
     constructor() {
