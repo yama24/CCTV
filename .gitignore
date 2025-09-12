@@ -127,3 +127,13 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+cctv.db
+database/
+*.db-journal
+*.db-wal
+*.db-shm

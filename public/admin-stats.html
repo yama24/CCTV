@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Statistics - CCTV Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-content {
+            margin-top: 30px;
+        }
+        
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(159, 122, 234, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(159, 122, 234, 0.2);
+        }
+        
+        .stats-info h3 {
+            margin: 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+        }
+        
+        .stats-info p {
+            margin: 5px 0 0 0;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 25px 0;
+        }
+        
+        .stat-card {
+            color: white;
+            padding: 30px 20px;
+            border-radius: 18px;
+            text-align: center;
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+        
+        .stat-card.users {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .stat-card.activities {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .stat-card.security {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .stat-card.sessions {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        
+        .stat-number {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-label {
+            margin: 10px 0 0 0;
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .cameras-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .cameras-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .cameras-list li {
+            background: #f8f9fa;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s ease;
+        }
+        
+        .cameras-list li:hover {
+            background: #e9ecef;
+        }
+        
+        .camera-name {
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .camera-rank {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .camera-sessions {
+            background: #e2e8f0;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: #4a5568;
+            font-weight: 600;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .refresh-button {
+            background: linear-gradient(45deg, #159f7a, #38f9d7);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        .refresh-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(67, 233, 123, 0.4);
+        }
+        
+        /* Responsive design for stats grid */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            .stat-card {
+                padding: 25px 15px;
+            }
+            
+            .admin-content {
+                margin-top: 20px;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                margin: 15px 0;
+            }
+            
+            .stat-card {
+                padding: 20px;
+            }
+            
+            .stat-number {
+                font-size: 2em;
+            }
+            
+            .stat-label {
+                font-size: 1em;
+            }
+            
+            .cameras-section {
+                padding: 20px;
+                margin: 15px 0;
+            }
+            
+            .cameras-list li {
+                padding: 12px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .camera-name {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            
+            .camera-sessions {
+                align-self: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <strong>🏠 CCTV System</strong>
+            </div>
+            <div class="nav-links">
+                <a href="/camera" class="nav-link">📹 Camera</a>
+                <a href="/viewer" class="nav-link">👁️ Viewer</a>
+                <a href="/admin" class="nav-link active">⚙️ Admin</a>
+                <a href="/logout" class="nav-link">🚪 Logout</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>📈 System Statistics</h1>
+            <p>Comprehensive analytics and performance metrics for your CCTV system.</p>
+            <div id="user-info" class="user-info" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+        </div>
+        
+        <div class="admin-content">
+            <div class="stats-header">
+                <div class="stats-info">
+                    <h3>Live System Metrics</h3>
+                    <p>Real-time performance and usage data</p>
+                </div>
+                <button class="refresh-button" onclick="loadStats()">🔄 Refresh</button>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card users">
+                    <h2 class="stat-number" id="active-users">-</h2>
+                    <p class="stat-label">Active Users</p>
+                </div>
+                
+                <div class="stat-card activities">
+                    <h2 class="stat-number" id="activities-24h">-</h2>
+                    <p class="stat-label">Activities (24h)</p>
+                </div>
+                
+                <div class="stat-card security">
+                    <h2 class="stat-number" id="failed-logins">-</h2>
+                    <p class="stat-label">Failed Logins (24h)</p>
+                </div>
+                
+                <div class="stat-card sessions">
+                    <h2 class="stat-number" id="total-sessions">-</h2>
+                    <p class="stat-label">Total Sessions</p>
+                </div>
+            </div>
+            
+            <div class="cameras-section">
+                <h2 style="color: #2d3748; margin-bottom: 20px;">🏆 Most Used Cameras</h2>
+                <ol class="cameras-list" id="top-cameras">
+                    <li class="loading">Loading camera statistics...</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; margin-top: 30px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); text-align: center;">
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                <a href="/admin" style="display: inline-flex; align-items: center; gap: 8px; color: #48bb78; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(72, 187, 120, 0.1);">
+                    ← Back to Dashboard
+                </a>
+                <a href="/admin/users" style="display: inline-flex; align-items: center; gap: 8px; color: #4299e1; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(66, 153, 225, 0.1);">
+                    👥 User Management
+                </a>
+                <a href="/admin/logs" style="display: inline-flex; align-items: center; gap: 8px; color: #9f7aea; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(159, 122, 234, 0.1);">
+                    📊 Activity Logs
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load user info and populate navigation
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/user');
+                const userInfo = await response.json();
+                
+                if (userInfo.username) {
+                    const userInfoDiv = document.getElementById('user-info');
+                    const roleClass = userInfo.role === 'admin' ? 'admin' : 'user';
+                    userInfoDiv.innerHTML = `
+                        Logged in as: <strong>${userInfo.username}</strong> 
+                        <span class="role-badge ${roleClass}">${userInfo.role.toUpperCase()}</span>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+        }
+
+        // Load system statistics
+        async function loadStats() {
+            try {
+                // First get a token
+                const tokenResponse = await fetch('/api/auth/token');
+                const tokenData = await tokenResponse.json();
+                
+                // Then use the token to fetch stats
+                const response = await fetch('/api/admin/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${tokenData.token}`
+                    }
+                });
+                const stats = await response.json();
+                
+                // Update stat cards
+                document.getElementById('active-users').textContent = stats.totalUsers || '0';
+                document.getElementById('activities-24h').textContent = stats.activeUsersToday || '0';
+                document.getElementById('failed-logins').textContent = stats.failedLoginsToday || '0';
+                document.getElementById('total-sessions').textContent = stats.totalCameraSessions || '0';
+                
+                // Update top cameras
+                const topCamerasList = document.getElementById('top-cameras');
+                topCamerasList.innerHTML = '';
+                
+                if (stats.topCameras && stats.topCameras.length > 0) {
+                    stats.topCameras.forEach((camera, index) => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <span class="camera-name">
+                                <span class="camera-rank">${index + 1}</span>
+                                ${camera.camera_name}
+                            </span>
+                            <span class="camera-sessions">${camera.sessions} sessions</span>
+                        `;
+                        topCamerasList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.innerHTML = '<span style="color: #718096; font-style: italic; text-align: center; width: 100%;">No camera activity yet</span>';
+                    li.style.justifyContent = 'center';
+                    topCamerasList.appendChild(li);
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+                document.getElementById('top-cameras').innerHTML = 
+                    '<li style="color: #e53e3e; text-align: center;">Failed to load statistics</li>';
+            }
+        }
+
+        // Initialize page
+        loadUserInfo();
+        loadStats();
+        
+        // Auto-refresh stats every 60 seconds
+        setInterval(loadStats, 60000);
+    </script>
+</body>
+</html>

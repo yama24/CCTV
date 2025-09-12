@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs - CCTV Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-content {
+            margin-top: 30px;
+        }
+        
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(72, 187, 120, 0.1);
+            padding: 20px 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(72, 187, 120, 0.2);
+        }
+        
+        .logs-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .log-count-badge {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+        }
+        
+        .refresh-button {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+        }
+        
+        .refresh-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.4);
+        }
+        
+        .refresh-button:active {
+            transform: scale(0.98);
+        }
+        
+        .logs-table-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            overflow-x: auto;
+            overflow-y: visible;
+            position: relative;
+        }
+        
+        .logs-table-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        .logs-table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .logs-table-container::-webkit-scrollbar-thumb {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            border-radius: 10px;
+        }
+        
+        .logs-table-container::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(45deg, #38a169, #2f855a);
+        }
+        
+        .logs-table {
+            width: 100%;
+            min-width: 800px;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        
+        .logs-table th {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        
+        .logs-table th:first-child {
+            border-top-left-radius: 12px;
+        }
+        
+        .logs-table th:last-child {
+            border-top-right-radius: 12px;
+        }
+        
+        .logs-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+            transition: background-color 0.2s ease;
+        }
+        
+        .logs-table tr:hover {
+            background-color: #f7fafc;
+        }
+        
+        .logs-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .action-badge {
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        
+        .action-connected {
+            background: linear-gradient(45deg, #c6f6d5, #9ae6b4);
+            color: #2f855a;
+            border: 1px solid #68d391;
+        }
+        
+        .action-disconnected {
+            background: linear-gradient(45deg, #fed7d7, #fbb6ce);
+            color: #c53030;
+            border: 1px solid #fc8181;
+        }
+        
+        .user-cell {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .time-cell {
+            font-size: 0.9rem;
+            color: #4a5568;
+            white-space: nowrap;
+        }
+        
+        .ip-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #718096;
+            background: #f7fafc;
+            padding: 4px 8px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        
+        .duration-cell {
+            font-weight: 500;
+            color: #4a5568;
+            text-align: center;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+        
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        .empty-state-text {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+        
+        .empty-state-subtext {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e2e8f0;
+            border-radius: 50%;
+            border-top-color: #48bb78;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #e53e3e;
+        }
+        
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-scroll-hint {
+                display: block !important;
+            }
+            
+            .logs-header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .logs-info {
+                justify-content: center;
+            }
+            
+            .logs-table-container {
+                padding: 15px;
+                overflow-x: auto;
+            }
+            
+            .logs-table {
+                min-width: 900px;
+            }
+            
+            .logs-table th,
+            .logs-table td {
+                padding: 12px 10px;
+                font-size: 0.85rem;
+                white-space: nowrap;
+            }
+            
+            .action-badge {
+                font-size: 0.75rem;
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <strong>🏠 CCTV System</strong>
+            </div>
+            <div class="nav-links">
+                <a href="/camera" class="nav-link">📹 Camera</a>
+                <a href="/viewer" class="nav-link">👁️ Viewer</a>
+                <a href="/admin" class="nav-link active">⚙️ Admin</a>
+                <a href="/logout" class="nav-link">🚪 Logout</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>📊 Activity Logs</h1>
+            <p>Monitor system activity, camera connections, and user sessions (Last 50 entries).</p>
+            <div id="user-info" class="user-info" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+        </div>
+        
+        <div class="admin-content">
+            <div class="logs-header">
+                <div class="logs-info">
+                    <strong>📊 Real-time Activity Monitoring</strong>
+                    <span class="log-count-badge">
+                        <span id="log-count">0</span> entries
+                    </span>
+                </div>
+                <button class="refresh-button" onclick="loadLogs()">
+                    🔄 Refresh Data
+                </button>
+            </div>
+            
+            <div class="logs-table-container">
+                <div style="display: none; background: rgba(72, 187, 120, 0.1); padding: 10px; margin-bottom: 15px; border-radius: 8px; font-size: 0.9rem; color: #2f855a;" class="mobile-scroll-hint">
+                    💡 <strong>Tip:</strong> Scroll horizontally to view all columns
+                </div>
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>⏰ Time</th>
+                            <th>👤 User</th>
+                            <th>🎯 Action</th>
+                            <th>📹 Camera</th>
+                            <th>🌐 IP Address</th>
+                            <th>⏱️ Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body">
+                        <tr>
+                            <td colspan="6" class="loading">
+                                <div class="loading-spinner"></div>
+                                Loading activity logs...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; margin-top: 30px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); text-align: center;">
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                <a href="/admin" style="display: inline-flex; align-items: center; gap: 8px; color: #48bb78; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(72, 187, 120, 0.1);">
+                    ← Back to Dashboard
+                </a>
+                <a href="/admin/users" style="display: inline-flex; align-items: center; gap: 8px; color: #4299e1; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(66, 153, 225, 0.1);">
+                    👥 User Management
+                </a>
+                <a href="/admin/stats" style="display: inline-flex; align-items: center; gap: 8px; color: #9f7aea; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(159, 122, 234, 0.1);">
+                    📈 Statistics
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load user info and populate navigation
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/user');
+                const userInfo = await response.json();
+                
+                if (userInfo.username) {
+                    const userInfoDiv = document.getElementById('user-info');
+                    const roleClass = userInfo.role === 'admin' ? 'admin' : 'user';
+                    userInfoDiv.innerHTML = `
+                        Logged in as: <strong>${userInfo.username}</strong> 
+                        <span class="role-badge ${roleClass}">${userInfo.role.toUpperCase()}</span>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+        }
+
+        // Load activity logs
+        async function loadLogs() {
+            try {
+                // First get a token
+                const tokenResponse = await fetch('/api/auth/token');
+                const tokenData = await tokenResponse.json();
+                
+                // Then use the token to fetch logs
+                const response = await fetch('/api/admin/logs', {
+                    headers: {
+                        'Authorization': `Bearer ${tokenData.token}`
+                    }
+                });
+                const logs = await response.json();
+                
+                document.getElementById('log-count').textContent = logs.length;
+                
+                const tbody = document.getElementById('logs-table-body');
+                tbody.innerHTML = '';
+                
+                if (logs.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                <div class="empty-state-icon">📝</div>
+                                <div class="empty-state-text">No activity logs found</div>
+                                <div class="empty-state-subtext">Start using the CCTV system to see activity logs here</div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                logs.forEach(log => {
+                    const timestamp = new Date(log.timestamp).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    
+                    const duration = log.duration ? `${log.duration}s` : '—';
+                    
+                    const actionIcon = {
+                        'camera_connected': '📹',
+                        'camera_disconnected': '📴', 
+                        'viewer_connected': '👁️',
+                        'viewer_disconnected': '👁️‍🗨️'
+                    }[log.action] || '📊';
+                    
+                    const actionClass = log.action.includes('connected') ? 'action-connected' : 'action-disconnected';
+                    const actionText = log.action.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="time-cell">${timestamp}</td>
+                        <td class="user-cell">${log.username}</td>
+                        <td><span class="action-badge ${actionClass}">${actionIcon} ${actionText}</span></td>
+                        <td><strong>${log.camera_name}</strong></td>
+                        <td><span class="ip-cell">${log.ip_address}</span></td>
+                        <td class="duration-cell">${duration}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                document.getElementById('log-count').textContent = '0';
+                document.getElementById('logs-table-body').innerHTML = `
+                    <tr>
+                        <td colspan="6" class="error-state">
+                            <div class="error-icon">⚠️</div>
+                            <div>Failed to load activity logs</div>
+                            <div style="font-size: 0.9rem; margin-top: 8px; opacity: 0.8;">
+                                Please check your connection and try refreshing the page
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Initialize page
+        loadUserInfo();
+        loadLogs();
+        
+        // Auto-refresh logs every 30 seconds
+        setInterval(loadLogs, 30000);
+    </script>
+</body>
+</html>

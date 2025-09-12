@@ -5,6 +5,7 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const Database = require('./database');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,10 +14,8 @@ const io = socketIo(server);
 // JWT secret key (in production, use environment variable)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
 
-// Simple in-memory user store (in production, use a proper database)
-const users = {
-    admin: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' // password: "password"
-};
+// Initialize database
+const db = new Database();
 
 // Middleware
 app.use(express.json());
@@ -52,6 +51,37 @@ const requireAuth = (req, res, next) => {
         return res.redirect('/login');
     }
 };
+
+// Role-based authentication middleware
+const requireRole = (requiredRole) => {
+    return (req, res, next) => {
+        if (!req.session || !req.session.authenticated) {
+            return res.redirect('/login');
+        }
+        
+        const userRole = req.session.userRole;
+        
+        // Admin has access to everything
+        if (userRole === 'admin') {
+            return next();
+        }
+        
+        // Check if user has required role
+        if (userRole !== requiredRole) {
+            return res.status(403).send(`
+                <h1>🚫 Access Denied</h1>
+                <p>You need <strong>${requiredRole}</strong> privileges to access this resource.</p>
+                <p>Your role: <strong>${userRole}</strong></p>
+                <a href="/camera">← Back to Camera</a>
+            `);
+        }
+        
+        next();
+    };
+};
+
+// Admin-only middleware
+const requireAdmin = requireRole('admin');
 
 // JWT token validation middleware
 const verifyToken = (token) => {
@@ -93,24 +123,113 @@ app.get('/login', (req, res) => {
 
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent') || '';
     
-    if (users[username] && await bcrypt.compare(password, users[username])) {
-        req.session.authenticated = true;
-        req.session.username = username;
+    try {
+        // Log login attempt
+        db.logLoginAttempt({
+            username,
+            ipAddress: clientIP,
+            userAgent,
+            success: false,
+            errorMessage: null
+        }, () => {});
         
-        // Generate JWT token for WebSocket authentication
-        const token = jwt.sign(
-            { username: username, authenticated: true },
-            JWT_SECRET,
-            { expiresIn: '24h' }
-        );
+        // Check for rate limiting
+        db.getRecentLoginAttempts(username, clientIP, 15, (err, attempts) => {
+            if (err) {
+                console.error('Error checking login attempts:', err);
+                return res.redirect('/login?error=Server error');
+            }
+            
+            const failedAttempts = attempts.filter(attempt => !attempt.success).length;
+            if (failedAttempts >= 5) {
+                db.logLoginAttempt({
+                    username,
+                    ipAddress: clientIP,
+                    userAgent,
+                    success: false,
+                    errorMessage: 'Too many failed attempts'
+                }, () => {});
+                
+                return res.redirect('/login?error=Too many failed attempts. Please try again later.');
+            }
+            
+            // Check user credentials
+            db.getUserByUsername(username, async (err, user) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.redirect('/login?error=Server error');
+                }
+                
+                if (!user) {
+                    db.logLoginAttempt({
+                        username,
+                        ipAddress: clientIP,
+                        userAgent,
+                        success: false,
+                        errorMessage: 'User not found'
+                    }, () => {});
+                    
+                    return res.redirect('/login?error=Invalid credentials');
+                }
+                
+                // Verify password
+                const passwordMatch = await bcrypt.compare(password, user.password_hash);
+                
+                if (passwordMatch) {
+                    // Successful login
+                    req.session.authenticated = true;
+                    req.session.username = user.username;
+                    req.session.userId = user.id;
+                    req.session.userRole = user.role;
+                    
+                    // Generate JWT token for WebSocket authentication
+                    const token = jwt.sign(
+                        { 
+                            username: user.username, 
+                            userId: user.id,
+                            role: user.role,
+                            authenticated: true 
+                        },
+                        JWT_SECRET,
+                        { expiresIn: '24h' }
+                    );
+                    
+                    // Store token in session for client-side access
+                    req.session.authToken = token;
+                    
+                    // Update last login time
+                    db.updateUserLastLogin(user.id, () => {});
+                    
+                    // Log successful login
+                    db.logLoginAttempt({
+                        username,
+                        ipAddress: clientIP,
+                        userAgent,
+                        success: true,
+                        errorMessage: null
+                    }, () => {});
+                    
+                    res.redirect('/camera');
+                } else {
+                    db.logLoginAttempt({
+                        username,
+                        ipAddress: clientIP,
+                        userAgent,
+                        success: false,
+                        errorMessage: 'Invalid password'
+                    }, () => {});
+                    
+                    res.redirect('/login?error=Invalid credentials');
+                }
+            });
+        });
         
-        // Store token in session for client-side access
-        req.session.authToken = token;
-        
-        res.redirect('/camera');
-    } else {
-        res.redirect('/login?error=Invalid credentials');
+    } catch (error) {
+        console.error('Login error:', error);
+        res.redirect('/login?error=Server error');
     }
 });
 
@@ -125,6 +244,24 @@ app.get('/camera', requireAuth, (req, res) => {
 
 app.get('/viewer', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
+});
+
+// Admin-only routes
+app.get('/admin', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/admin/users', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin-users.html'));
+});
+
+
+app.get('/admin/logs', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin-logs.html'));
+});
+
+app.get('/admin/stats', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin-stats.html'));
 });
 
 // Secure access to JavaScript files - require authentication
@@ -145,7 +282,12 @@ app.get('/css/style.css', (req, res) => {
 app.get('/api/auth/token', requireAuth, (req, res) => {
     // Always generate a fresh token to ensure it's valid
     const token = jwt.sign(
-        { username: req.session.username, authenticated: true },
+        { 
+            username: req.session.username, 
+            userId: req.session.userId,
+            role: req.session.userRole,
+            authenticated: true 
+        },
         JWT_SECRET,
         { expiresIn: '24h' }
     );
@@ -154,6 +296,16 @@ app.get('/api/auth/token', requireAuth, (req, res) => {
     req.session.authToken = token;
     
     res.json({ token });
+});
+
+// API endpoint to get current user information
+app.get('/api/auth/user', requireAuth, (req, res) => {
+    res.json({
+        username: req.session.username,
+        userId: req.session.userId,
+        role: req.session.userRole,
+        authenticated: true
+    });
 });
 
 // API endpoint to validate token
@@ -174,14 +326,109 @@ app.post('/api/auth/validate', (req, res) => {
 
 // API endpoint to get active cameras
 app.get('/api/cameras', requireApiAuth, (req, res) => {
+    const userRole = req.user.role;
+    
     const cameraList = Array.from(cameras.entries()).map(([roomId, info]) => ({
         roomId,
         name: info.name,
         deviceInfo: info.deviceInfo,
         connectedAt: info.connectedAt,
-        status: info.status
+        status: info.status,
+        // Only show owner info to admins
+        ...(userRole === 'admin' && { 
+            userId: info.userId,
+            ownerInfo: `User ID: ${info.userId}` 
+        })
     }));
+    
     res.json(cameraList);
+});
+
+// Admin-only API endpoints
+app.get('/api/admin/users', requireApiAuth, (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    db.db.all(
+        'SELECT id, username, email, full_name, role, is_active, created_at, last_login FROM users ORDER BY created_at DESC',
+        (err, users) => {
+            if (err) {
+                return res.status(500).json({ error: 'Database error' });
+            }
+            res.json(users);
+        }
+    );
+});
+
+app.get('/api/admin/logs', requireApiAuth, (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    db.db.all(
+        `SELECT cl.*, u.username 
+         FROM camera_logs cl 
+         JOIN users u ON cl.user_id = u.id 
+         ORDER BY cl.timestamp DESC 
+         LIMIT ? OFFSET ?`,
+        [limit, offset],
+        (err, logs) => {
+            if (err) {
+                return res.status(500).json({ error: 'Database error' });
+            }
+            res.json(logs);
+        }
+    );
+});
+
+app.get('/api/admin/stats', requireApiAuth, (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    // Get comprehensive statistics
+    const queries = {
+        totalUsers: 'SELECT COUNT(*) as count FROM users',
+        activeUsers: 'SELECT COUNT(*) as count FROM users WHERE is_active = 1',
+        adminUsers: 'SELECT COUNT(*) as count FROM users WHERE role = "admin"',
+        activeSessions: 'SELECT COUNT(*) as count FROM sessions WHERE is_active = 1 AND expires_at > datetime("now")',
+        activities24h: 'SELECT COUNT(*) as count FROM camera_logs WHERE timestamp > datetime("now", "-24 hours")',
+        failedLogins24h: 'SELECT COUNT(*) as count FROM login_attempts WHERE success = 0 AND timestamp > datetime("now", "-24 hours")',
+        topCameras: `SELECT room_id, camera_name, COUNT(*) as sessions 
+                     FROM camera_logs 
+                     WHERE action = "camera_connected" 
+                     GROUP BY room_id 
+                     ORDER BY sessions DESC 
+                     LIMIT 10`
+    };
+    
+    const results = {};
+    let completed = 0;
+    const total = Object.keys(queries).length;
+    
+    Object.entries(queries).forEach(([key, query]) => {
+        if (key === 'topCameras') {
+            db.db.all(query, (err, rows) => {
+                results[key] = err ? [] : rows;
+                completed++;
+                if (completed === total) {
+                    res.json(results);
+                }
+            });
+        } else {
+            db.db.get(query, (err, row) => {
+                results[key] = err ? 0 : (row?.count || 0);
+                completed++;
+                if (completed === total) {
+                    res.json(results);
+                }
+            });
+        }
+    });
 });
 
 // WebRTC signaling
@@ -236,9 +483,22 @@ io.on('connection', (socket) => {
                 name: cameraName || `Camera ${roomId}`,
                 deviceInfo: deviceInfo || 'Unknown device',
                 connectedAt: new Date(),
-                status: 'active'
+                status: 'active',
+                userId: socket.user.userId
             });
-            console.log(`Camera "${cameraName}" joined room ${roomId}`);
+            
+            // Log camera connection
+            db.logCameraActivity({
+                roomId,
+                cameraName: cameraName || `Camera ${roomId}`,
+                deviceInfo: deviceInfo || 'Unknown device',
+                userId: socket.user.userId,
+                action: 'camera_connected',
+                ipAddress: socket.handshake.address,
+                duration: null
+            }, () => {});
+            
+            console.log(`Camera "${cameraName}" joined room ${roomId} by user ${socket.user.username}`);
             // Notify all connected clients about camera list update
             io.emit('cameras-updated', Array.from(cameras.entries()).map(([id, info]) => ({
                 roomId: id,
@@ -246,7 +506,19 @@ io.on('connection', (socket) => {
             })));
         } else if (role === 'viewer') {
             room.viewers.push(socket.id);
-            console.log(`Viewer joined room ${roomId}`);
+            
+            // Log viewer connection
+            db.logCameraActivity({
+                roomId,
+                cameraName: cameras.get(roomId)?.name || 'Unknown camera',
+                deviceInfo: 'Viewer connection',
+                userId: socket.user.userId,
+                action: 'viewer_connected',
+                ipAddress: socket.handshake.address,
+                duration: null
+            }, () => {});
+            
+            console.log(`Viewer joined room ${roomId} by user ${socket.user.username}`);
             // Send current camera list to the new viewer
             socket.emit('cameras-updated', Array.from(cameras.entries()).map(([id, info]) => ({
                 roomId: id,
@@ -383,6 +655,22 @@ io.on('connection', (socket) => {
             const room = rooms.get(socket.roomId);
             
             if (socket.role === 'camera' && room.camera === socket.id) {
+                const cameraInfo = cameras.get(socket.roomId);
+                
+                // Log camera disconnection
+                if (cameraInfo && socket.user) {
+                    const duration = Date.now() - new Date(cameraInfo.connectedAt).getTime();
+                    db.logCameraActivity({
+                        roomId: socket.roomId,
+                        cameraName: cameraInfo.name,
+                        deviceInfo: cameraInfo.deviceInfo,
+                        userId: socket.user.userId,
+                        action: 'camera_disconnected',
+                        ipAddress: socket.handshake.address,
+                        duration: Math.floor(duration / 1000) // Convert to seconds
+                    }, () => {});
+                }
+                
                 room.camera = null;
                 // Remove from cameras list
                 cameras.delete(socket.roomId);
@@ -394,6 +682,19 @@ io.on('connection', (socket) => {
                     ...info
                 })));
             } else if (socket.role === 'viewer') {
+                // Log viewer disconnection
+                if (socket.user) {
+                    db.logCameraActivity({
+                        roomId: socket.roomId,
+                        cameraName: cameras.get(socket.roomId)?.name || 'Unknown camera',
+                        deviceInfo: 'Viewer disconnection',
+                        userId: socket.user.userId,
+                        action: 'viewer_disconnected',
+                        ipAddress: socket.handshake.address,
+                        duration: null
+                    }, () => {});
+                }
+                
                 room.viewers = room.viewers.filter(id => id !== socket.id);
             }
 

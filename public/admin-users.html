@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - CCTV Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-content {
+            margin-top: 20px;
+        }
+        
+        .users-table-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        .users-table-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        .users-table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .users-table-container::-webkit-scrollbar-thumb {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            border-radius: 10px;
+        }
+        
+        .users-table-container::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(45deg, #3182ce, #2c5282);
+        }
+        
+        .users-table {
+            width: 100%;
+            min-width: 700px;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        .users-table th {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: none;
+        }
+        
+        .users-table th:first-child {
+            border-top-left-radius: 12px;
+        }
+        
+        .users-table th:last-child {
+            border-top-right-radius: 12px;
+        }
+        
+        .users-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+        
+        .users-table tr:hover {
+            background-color: #f7fafc;
+        }
+        
+        .users-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 10px;
+        }
+        
+        .username {
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+        }
+        
+        .role-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .role-admin {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+        }
+        
+        .role-user {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            color: white;
+        }
+        
+        .status-active {
+            color: #38a169;
+            font-weight: 600;
+        }
+        
+        .status-inactive {
+            color: #e53e3e;
+            font-weight: 600;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .user-count-badge {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-scroll-hint {
+                display: block !important;
+            }
+            
+            .users-table-container {
+                padding: 15px;
+                overflow-x: auto;
+            }
+            
+            .users-table {
+                min-width: 800px;
+            }
+            
+            .users-table th,
+            .users-table td {
+                padding: 12px 10px;
+                font-size: 0.85rem;
+                white-space: nowrap;
+            }
+            
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 1rem;
+                margin-right: 8px;
+            }
+            
+            .role-badge {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <strong>🏠 CCTV System</strong>
+            </div>
+            <div class="nav-links">
+                <a href="/camera" class="nav-link">📹 Camera</a>
+                <a href="/viewer" class="nav-link">👁️ Viewer</a>
+                <a href="/admin" class="nav-link active">⚙️ Admin</a>
+                <a href="/logout" class="nav-link">🚪 Logout</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>👥 User Management</h1>
+            <p>Manage user accounts, roles, and permissions for your CCTV system.</p>
+            <div id="user-info" class="user-info" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+        </div>
+        
+        <div class="admin-content">
+            <div class="info" style="background: rgba(66, 153, 225, 0.1); padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <strong>Total Users: <span id="user-count">-</span></strong> - Managing system access and permissions
+            </div>
+            
+            <div class="users-table-container">
+                <div style="display: none; background: rgba(66, 153, 225, 0.1); padding: 10px; margin-bottom: 15px; border-radius: 8px; font-size: 0.9rem; color: #2c5282;" class="mobile-scroll-hint">
+                    💡 <strong>Tip:</strong> Scroll horizontally to view all columns
+                </div>
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Contact</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Last Login</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <tr>
+                            <td colspan="6" class="loading">Loading users...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="info">
+                <h3 style="margin-bottom: 15px; color: #2d3748;">💡 User Management Tips:</h3>
+                <ul style="color: #4a5568; line-height: 1.6;">
+                    <li><strong>Add User:</strong> Run <code>node user-manager.js</code> and select option 1</li>
+                    <li><strong>Change Password:</strong> Run <code>node user-manager.js</code> and select option 3</li>
+                    <li><strong>Delete User:</strong> Run <code>node user-manager.js</code> and select option 2</li>
+                    <li><strong>List All Users:</strong> Run <code>node user-manager.js</code> and select option 4</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; margin-top: 30px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); text-align: center;">
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                <a href="/admin" style="display: inline-flex; align-items: center; gap: 8px; color: #48bb78; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(72, 187, 120, 0.1);">
+                    ← Back to Dashboard
+                </a>
+                <a href="/admin/logs" style="display: inline-flex; align-items: center; gap: 8px; color: #4299e1; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(66, 153, 225, 0.1);">
+                    📊 Activity Logs
+                </a>
+                <a href="/admin/stats" style="display: inline-flex; align-items: center; gap: 8px; color: #9f7aea; text-decoration: none; padding: 10px 20px; border-radius: 10px; transition: all 0.3s ease; background: rgba(159, 122, 234, 0.1);">
+                    📈 Statistics
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load user info and populate navigation
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/user');
+                const userInfo = await response.json();
+                
+                if (userInfo.username) {
+                    const userInfoDiv = document.getElementById('user-info');
+                    const roleClass = userInfo.role === 'admin' ? 'admin' : 'user';
+                    userInfoDiv.innerHTML = `
+                        Logged in as: <strong>${userInfo.username}</strong> 
+                        <span class="role-badge ${roleClass}">${userInfo.role.toUpperCase()}</span>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+        }
+
+        // Load users data
+        async function loadUsers() {
+            try {
+                // First get a token
+                const tokenResponse = await fetch('/api/auth/token');
+                const tokenData = await tokenResponse.json();
+                
+                // Then use the token to fetch users
+                const response = await fetch('/api/admin/users', {
+                    headers: {
+                        'Authorization': `Bearer ${tokenData.token}`
+                    }
+                });
+                const users = await response.json();
+                
+                document.getElementById('user-count').textContent = users.length;
+                
+                const tbody = document.getElementById('users-table-body');
+                tbody.innerHTML = '';
+                
+                users.forEach(user => {
+                    const status = user.is_active ? 'Active' : 'Inactive';
+                    const statusClass = user.is_active ? 'status-active' : 'status-inactive';
+                    const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString() : 'Never';
+                    const created = new Date(user.created_at).toLocaleDateString();
+                    const avatar = user.username.charAt(0).toUpperCase();
+                    const roleClass = user.role === 'admin' ? 'role-admin' : 'role-user';
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <div class="username">
+                                <div class="user-avatar">${avatar}</div>
+                                <div>
+                                    <strong>${user.username}</strong>
+                                    <br>
+                                    <small style="color: #718096;">${user.full_name || 'No full name'}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${user.email || '<span style="color: #a0aec0;">No email</span>'}</td>
+                        <td><span class="role-badge ${roleClass}">${user.role}</span></td>
+                        <td><span class="${statusClass}">● ${status}</span></td>
+                        <td>${created}</td>
+                        <td>${lastLogin}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Failed to load users:', error);
+                document.getElementById('users-table-body').innerHTML = 
+                    '<tr><td colspan="6" style="text-align: center; color: #e53e3e;">Failed to load users</td></tr>';
+            }
+        }
+
+        // Initialize page
+        loadUserInfo();
+        loadUsers();
+    </script>
+</body>
+</html>

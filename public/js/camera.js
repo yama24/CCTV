@@ -83,6 +83,9 @@ class CCTVCamera {
             
             this.initializeSocketListeners();
             
+            // Load user information and setup UI
+            this.loadUserInfo();
+            
             // Set up periodic token validation (every 5 minutes)
             setInterval(() => this.validateToken(), 5 * 60 * 1000);
             
@@ -91,6 +94,39 @@ class CCTVCamera {
             alert('Authentication failed. Please log in again.');
             window.location.href = '/login';
         }
+    }
+
+    async loadUserInfo() {
+        try {
+            const response = await fetch('/api/auth/user', {
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const user = await response.json();
+                this.displayUserInfo(user);
+            }
+        } catch (error) {
+            console.error('Error loading user info:', error);
+        }
+    }
+
+    displayUserInfo(user) {
+        const userInfoDiv = document.getElementById('user-info');
+        if (userInfoDiv) {
+            userInfoDiv.innerHTML = `
+                👤 Logged in as: <strong>${user.username}</strong> 
+                <span style="background-color: ${user.role === 'admin' ? '#dc3545' : '#28a745'}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">
+                    ${user.role.toUpperCase()}
+                </span>
+            `;
+        }
+
+        // Show/hide admin navigation based on role
+        const adminLinks = document.querySelectorAll('.admin-only');
+        adminLinks.forEach(link => {
+            link.style.display = user.role === 'admin' ? 'inline-block' : 'none';
+        });
     }
 
     async validateToken() {

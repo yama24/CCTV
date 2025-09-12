@@ -8,9 +8,22 @@
 </head>
 <body>
     <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <strong>🏠 CCTV System</strong>
+            </div>
+            <div class="nav-links">
+                <a href="/camera" class="nav-link">📹 Camera</a>
+                <a href="/viewer" class="nav-link active">👁️ Viewer</a>
+                <a href="/admin" class="nav-link admin-only" style="display: none;">⚙️ Admin</a>
+                <a href="/logout" class="nav-link">🚪 Logout</a>
+            </div>
+        </nav>
+
         <div class="header">
             <h1>👁️ Home CCTV Viewer</h1>
             <p>Select and view your home security cameras</p>
+            <div id="user-info" class="user-info" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
         </div>
 
         <div class="camera-list">
@@ -59,10 +72,7 @@
             </div>
         </div>
 
-        <div class="controls">
-            <button onclick="location.href='/camera'">📹 Camera Setup</button>
-            <button onclick="location.href='/logout'">🚪 Logout</button>
-        </div>
+
 
         <div id="status" class="status disconnected">
             📱 Ready to connect
