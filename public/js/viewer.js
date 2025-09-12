@@ -9,10 +9,14 @@ class CCTVViewer {
         this.viewingInfo = document.getElementById('viewingInfo');
         this.currentCameraName = document.getElementById('currentCameraName');
         this.videoPlaceholder = document.getElementById('videoPlaceholder');
+        this.remoteVideoSelect = document.getElementById('remoteVideoSelect');
+        this.remoteAudioSelect = document.getElementById('remoteAudioSelect');
+        this.refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
         
         this.peerConnection = null;
         this.currentCamera = null;
         this.availableCameras = [];
+        this.remoteDevices = { video: [], audio: [], current: {} };
         this.isConnected = false;
         this.isConnecting = false;
         
@@ -24,6 +28,19 @@ class CCTVViewer {
     initializeEventListeners() {
         this.disconnectBtn.addEventListener('click', () => this.disconnect());
         this.refreshBtn.addEventListener('click', () => this.loadCameras());
+        this.refreshDevicesBtn.addEventListener('click', () => this.requestRemoteDeviceList());
+        
+        this.remoteVideoSelect.addEventListener('change', (e) => {
+            if (e.target.value && this.isConnected) {
+                this.requestDeviceSwitch('video', e.target.value);
+            }
+        });
+        
+        this.remoteAudioSelect.addEventListener('change', (e) => {
+            if (e.target.value && this.isConnected) {
+                this.requestDeviceSwitch('audio', e.target.value);
+            }
+        });
     }
 
     initializeSocketListeners() {
@@ -65,6 +82,20 @@ class CCTVViewer {
         this.socket.on('ice-candidate', (data) => {
             console.log('Received ICE candidate from camera');
             this.handleIceCandidate(data.candidate);
+        });
+
+        this.socket.on('device-list', (data) => {
+            console.log('Received device list from camera:', data.devices);
+            this.updateRemoteDeviceList(data.devices);
+        });
+
+        this.socket.on('device-switched', (data) => {
+            console.log('Device switch result:', data);
+            if (data.success) {
+                this.updateStatus(`✅ Switched ${data.deviceType} successfully`, 'connected');
+            } else {
+                this.updateStatus(`❌ Failed to switch ${data.deviceType}: ${data.error}`, 'connected');
+            }
         });
     }
 
@@ -154,7 +185,7 @@ class CCTVViewer {
         this.isConnecting = true;
         this.currentCameraName.textContent = camera.name;
         this.viewingInfo.style.display = 'block';
-        this.videoPlaceholder.style.display = 'none';
+        this.hideVideo(); // Hide video until stream is received
         
         this.renderCameraList(); // Update visual state
         this.updateStatus(`🔄 Connecting to ${camera.name}...`, 'disconnected');
@@ -168,6 +199,8 @@ class CCTVViewer {
         // Request an offer from the camera
         setTimeout(() => {
             this.socket.emit('request-offer');
+            // Also request the device list
+            this.requestRemoteDeviceList();
         }, 1000);
     }
 
@@ -187,6 +220,7 @@ class CCTVViewer {
             this.peerConnection.ontrack = (event) => {
                 console.log('Received remote stream');
                 this.remoteVideo.srcObject = event.streams[0];
+                this.showVideo();
                 this.isConnected = true;
                 this.isConnecting = false;
                 this.renderCameraList(); // Update visual state
@@ -218,7 +252,7 @@ class CCTVViewer {
                     case 'closed':
                         this.isConnected = false;
                         this.isConnecting = false;
-                        this.remoteVideo.srcObject = null;
+                        this.hideVideo();
                         this.updateStatus('📴 Connection lost', 'disconnected');
                         break;
                     case 'connecting':
@@ -263,7 +297,7 @@ class CCTVViewer {
             this.peerConnection = null;
         }
 
-        this.remoteVideo.srcObject = null;
+        this.hideVideo();
         this.isConnected = false;
         this.isConnecting = false;
         this.currentCamera = null;
@@ -273,6 +307,65 @@ class CCTVViewer {
         
         this.renderCameraList();
         this.updateStatus('📱 Click any camera to start viewing', 'connected');
+    }
+
+    requestRemoteDeviceList() {
+        if (this.isConnected && this.currentCamera) {
+            this.socket.emit('request-device-list', {
+                roomId: this.currentCamera.roomId
+            });
+        }
+    }
+
+    updateRemoteDeviceList(devices) {
+        this.remoteDevices = devices;
+        
+        // Update video device selector
+        this.remoteVideoSelect.innerHTML = '<option value="">Select Camera...</option>';
+        devices.video.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label;
+            if (device.deviceId === devices.current.video) {
+                option.selected = true;
+            }
+            this.remoteVideoSelect.appendChild(option);
+        });
+        
+        // Update audio device selector
+        this.remoteAudioSelect.innerHTML = '<option value="">Select Microphone...</option>';
+        devices.audio.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label;
+            if (device.deviceId === devices.current.audio) {
+                option.selected = true;
+            }
+            this.remoteAudioSelect.appendChild(option);
+        });
+    }
+
+    requestDeviceSwitch(deviceType, deviceId) {
+        if (this.isConnected && this.currentCamera) {
+            console.log(`Requesting switch of ${deviceType} to:`, deviceId);
+            this.socket.emit('switch-device-request', {
+                roomId: this.currentCamera.roomId,
+                deviceType: deviceType,
+                deviceId: deviceId
+            });
+            this.updateStatus(`🔄 Switching ${deviceType}...`, 'connected');
+        }
+    }
+
+    showVideo() {
+        this.remoteVideo.style.display = 'block';
+        this.videoPlaceholder.style.display = 'none';
+    }
+
+    hideVideo() {
+        this.remoteVideo.srcObject = null;
+        this.remoteVideo.style.display = 'none';
+        this.videoPlaceholder.style.display = 'flex';
     }
 
     updateStatus(message, type) {

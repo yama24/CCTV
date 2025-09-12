@@ -7,19 +7,54 @@ class CCTVCamera {
         this.status = document.getElementById('status');
         this.cameraNameInput = document.getElementById('cameraName');
         this.deviceInfoInput = document.getElementById('deviceInfo');
+        this.cameraPlaceholder = document.getElementById('cameraPlaceholder');
         
         this.localStream = null;
         this.peerConnections = new Map(); // Store multiple connections for multiple viewers
         this.roomId = null; // Will be generated based on camera name
+        this.availableDevices = {
+            video: [],
+            audio: []
+        };
+        this.currentDevices = {
+            video: null,
+            audio: null
+        };
         
         this.initializeEventListeners();
         this.initializeSocketListeners();
         this.initializeDefaults();
+        this.loadAvailableDevices();
+        this.hideVideo(); // Initially hide video until camera starts
     }
 
     initializeEventListeners() {
         this.startBtn.addEventListener('click', () => this.startCamera());
         this.stopBtn.addEventListener('click', () => this.stopCamera());
+        
+        // Device selection change listeners
+        const videoSelect = document.getElementById('videoDeviceSelect');
+        const audioSelect = document.getElementById('audioDeviceSelect');
+        
+        if (videoSelect) {
+            videoSelect.addEventListener('change', (e) => {
+                if (e.target.value && this.localStream) {
+                    this.switchDevice('video', e.target.value);
+                } else if (e.target.value) {
+                    this.currentDevices.video = e.target.value;
+                }
+            });
+        }
+        
+        if (audioSelect) {
+            audioSelect.addEventListener('change', (e) => {
+                if (e.target.value && this.localStream) {
+                    this.switchDevice('audio', e.target.value);
+                } else if (e.target.value) {
+                    this.currentDevices.audio = e.target.value;
+                }
+            });
+        }
     }
 
     initializeDefaults() {
@@ -27,17 +62,89 @@ class CCTVCamera {
         const defaultCameraName = `Camera-${Math.random().toString(36).substr(2, 5)}`;
         this.cameraNameInput.value = defaultCameraName;
         
-        // Try to detect device info
-        const userAgent = navigator.userAgent;
-        let deviceInfo = 'Unknown Device';
-        if (userAgent.includes('Mobile')) {
-            deviceInfo = 'Mobile Device';
-        } else if (userAgent.includes('Tablet')) {
-            deviceInfo = 'Tablet';
-        } else {
-            deviceInfo = 'Desktop/Laptop';
+        // Try to get actual device name
+        this.getDeviceName().then(deviceName => {
+            this.deviceInfoInput.value = deviceName;
+            
+            // Add a hint to help users set the correct device name
+            this.deviceInfoInput.placeholder = 'e.g., John\'s Laptop or Office-PC';
+            this.deviceInfoInput.title = 'Enter your computer/device name for easier identification';
+        });
+    }
+
+    async getDeviceName() {
+        try {
+            // Try to get device name from various sources
+            let deviceName = 'Unknown Device';
+            
+            // Method 1: Try WebRTC to get local IP and potentially hostname
+            try {
+                const rtcConnection = new RTCPeerConnection({iceServers: []});
+                rtcConnection.createDataChannel('');
+                
+                const offer = await rtcConnection.createOffer();
+                await rtcConnection.setLocalDescription(offer);
+                
+                // Extract local IP from ICE candidates (may help identify device)
+                const localIP = await new Promise((resolve) => {
+                    rtcConnection.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            const candidate = event.candidate.candidate;
+                            const ipMatch = candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+                            if (ipMatch) {
+                                resolve(ipMatch[1]);
+                            }
+                        }
+                    };
+                    setTimeout(() => resolve(null), 1000); // Timeout after 1 second
+                });
+                
+                if (localIP && localIP !== '127.0.0.1') {
+                    deviceName = `Device-${localIP.split('.').slice(-2).join('-')}`;
+                }
+                
+                rtcConnection.close();
+            } catch (rtcError) {
+                console.log('WebRTC method failed:', rtcError);
+            }
+            
+            // Method 2: Try to get hostname from location.hostname (works for some setups)
+            if (location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                deviceName = location.hostname;
+            } else {
+                // Method 2: Parse User Agent for device information
+                const userAgent = navigator.userAgent;
+                
+                // Extract device info from user agent patterns
+                if (userAgent.includes('Windows NT')) {
+                    const match = userAgent.match(/Windows NT ([\d.]+)/);
+                    deviceName = match ? `Windows-${match[1]}-Device` : 'Windows-Device';
+                } else if (userAgent.includes('Macintosh')) {
+                    const match = userAgent.match(/Mac OS X ([\d_]+)/);
+                    deviceName = match ? `Mac-${match[1].replace(/_/g, '.')}-Device` : 'Mac-Device';
+                } else if (userAgent.includes('Linux')) {
+                    deviceName = 'Linux-Device';
+                } else if (userAgent.includes('Android')) {
+                    const match = userAgent.match(/Android ([\d.]+)/);
+                    deviceName = match ? `Android-${match[1]}-Device` : 'Android-Device';
+                } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                    const match = userAgent.match(/OS ([\d_]+)/);
+                    deviceName = match ? `iOS-${match[1].replace(/_/g, '.')}-Device` : 'iOS-Device';
+                }
+                
+                // Try to add more specific device info if available
+                const platform = navigator.platform;
+                if (platform) {
+                    deviceName = `${platform}-${deviceName}`;
+                }
+            }
+            
+            return deviceName;
+            
+        } catch (error) {
+            console.log('Could not determine device name:', error);
+            return 'Unknown-Device';
         }
-        this.deviceInfoInput.value = deviceInfo;
     }
 
     initializeSocketListeners() {
@@ -65,6 +172,16 @@ class CCTVCamera {
             console.log('Received ICE candidate from viewer');
             this.handleIceCandidate(data.candidate, data.sender);
         });
+
+        this.socket.on('request-device-list', (data) => {
+            console.log('Viewer requesting device list');
+            this.sendDeviceList(data.viewerId);
+        });
+
+        this.socket.on('switch-device-request', (data) => {
+            console.log('Viewer requesting device switch:', data);
+            this.handleRemoteDeviceSwitch(data.deviceType, data.deviceId, data.viewerId);
+        });
     }
 
     async startCamera() {
@@ -83,8 +200,8 @@ class CCTVCamera {
             
             this.updateStatus('📷 Starting camera...', 'disconnected');
             
-            // Get user media with both video and audio
-            this.localStream = await navigator.mediaDevices.getUserMedia({
+            // Build constraints with selected devices
+            const constraints = {
                 video: {
                     width: { ideal: 640 },
                     height: { ideal: 480 },
@@ -95,9 +212,21 @@ class CCTVCamera {
                     noiseSuppression: true,
                     autoGainControl: true
                 }
-            });
+            };
+            
+            // Use selected devices if available
+            if (this.currentDevices.video) {
+                constraints.video.deviceId = { exact: this.currentDevices.video };
+            }
+            if (this.currentDevices.audio) {
+                constraints.audio.deviceId = { exact: this.currentDevices.audio };
+            }
+            
+            // Get user media with selected devices
+            this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
             this.localVideo.srcObject = this.localStream;
+            this.showVideo();
             
             // Join the room as a camera with metadata
             this.socket.emit('join-room', {
@@ -125,7 +254,7 @@ class CCTVCamera {
             this.localStream = null;
         }
 
-        this.localVideo.srcObject = null;
+        this.hideVideo();
         
         // Close all peer connections
         this.peerConnections.forEach(pc => pc.close());
@@ -217,6 +346,199 @@ class CCTVCamera {
         } catch (error) {
             console.error('Error handling ICE candidate:', error);
         }
+    }
+
+    async loadAvailableDevices() {
+        try {
+            // Request permission first to ensure device labels are available
+            await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    stream.getTracks().forEach(track => track.stop());
+                });
+            
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            
+            this.availableDevices.video = devices.filter(device => device.kind === 'videoinput');
+            this.availableDevices.audio = devices.filter(device => device.kind === 'audioinput');
+            
+            console.log('Available video devices:', this.availableDevices.video);
+            console.log('Available audio devices:', this.availableDevices.audio);
+            
+            this.populateDeviceSelectors();
+            
+            // Try to extract hostname from device labels
+            this.extractHostnameFromDevices();
+        } catch (error) {
+            console.error('Error loading devices:', error);
+        }
+    }
+
+    extractHostnameFromDevices() {
+        // Sometimes device labels contain system information we can use
+        const allDevices = [...this.availableDevices.video, ...this.availableDevices.audio];
+        
+        for (const device of allDevices) {
+            if (device.label) {
+                console.log('Device label:', device.label);
+                // Look for patterns that might contain hostname
+                // Some devices show up as "Camera (hostname)" or similar
+            }
+        }
+    }
+
+    populateDeviceSelectors() {
+        const videoSelect = document.getElementById('videoDeviceSelect');
+        const audioSelect = document.getElementById('audioDeviceSelect');
+        
+        if (videoSelect) {
+            videoSelect.innerHTML = '<option value="">Select Camera...</option>';
+            this.availableDevices.video.forEach((device, index) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${index + 1}`;
+                videoSelect.appendChild(option);
+            });
+            
+            // Select first device by default
+            if (this.availableDevices.video.length > 0) {
+                videoSelect.value = this.availableDevices.video[0].deviceId;
+                this.currentDevices.video = this.availableDevices.video[0].deviceId;
+            }
+        }
+        
+        if (audioSelect) {
+            audioSelect.innerHTML = '<option value="">Select Microphone...</option>';
+            this.availableDevices.audio.forEach((device, index) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Microphone ${index + 1}`;
+                audioSelect.appendChild(option);
+            });
+            
+            // Select first device by default
+            if (this.availableDevices.audio.length > 0) {
+                audioSelect.value = this.availableDevices.audio[0].deviceId;
+                this.currentDevices.audio = this.availableDevices.audio[0].deviceId;
+            }
+        }
+    }
+
+    async switchDevice(type, deviceId) {
+        if (!this.localStream) return;
+        
+        try {
+            const constraints = {
+                video: type === 'video' ? { deviceId: { exact: deviceId } } : false,
+                audio: type === 'audio' ? { deviceId: { exact: deviceId } } : false
+            };
+            
+            // If switching video, keep current audio
+            if (type === 'video' && this.currentDevices.audio) {
+                constraints.audio = { deviceId: { exact: this.currentDevices.audio } };
+            }
+            
+            // If switching audio, keep current video
+            if (type === 'audio' && this.currentDevices.video) {
+                constraints.video = { deviceId: { exact: this.currentDevices.video } };
+            }
+            
+            const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Replace tracks in existing peer connections
+            const newTracks = newStream.getTracks();
+            
+            this.peerConnections.forEach((peerConnection) => {
+                const senders = peerConnection.getSenders();
+                
+                newTracks.forEach(newTrack => {
+                    const sender = senders.find(s => 
+                        s.track && s.track.kind === newTrack.kind
+                    );
+                    
+                    if (sender) {
+                        sender.replaceTrack(newTrack);
+                    }
+                });
+            });
+            
+            // Stop old tracks
+            this.localStream.getTracks().forEach(track => track.stop());
+            
+            // Update local stream and video element
+            this.localStream = newStream;
+            this.localVideo.srcObject = this.localStream;
+            this.showVideo(); // Ensure video is visible after switching
+            this.currentDevices[type] = deviceId;
+            
+            this.updateStatus(`🔄 Switched ${type} device`, 'connected');
+            
+        } catch (error) {
+            console.error(`Error switching ${type} device:`, error);
+            this.updateStatus(`❌ Failed to switch ${type} device`, 'disconnected');
+        }
+    }
+
+    sendDeviceList(viewerId) {
+        const deviceList = {
+            video: this.availableDevices.video.map(device => ({
+                deviceId: device.deviceId,
+                label: device.label || 'Unknown Camera'
+            })),
+            audio: this.availableDevices.audio.map(device => ({
+                deviceId: device.deviceId,
+                label: device.label || 'Unknown Microphone'
+            })),
+            current: this.currentDevices
+        };
+        
+        this.socket.emit('device-list', {
+            target: viewerId,
+            devices: deviceList
+        });
+    }
+
+    async handleRemoteDeviceSwitch(deviceType, deviceId, viewerId) {
+        try {
+            console.log(`Switching ${deviceType} to device:`, deviceId);
+            
+            // Update the device selectors in the UI
+            const selector = document.getElementById(deviceType === 'video' ? 'videoDeviceSelect' : 'audioDeviceSelect');
+            if (selector) {
+                selector.value = deviceId;
+            }
+            
+            // Switch the actual device
+            await this.switchDevice(deviceType, deviceId);
+            
+            // Confirm to viewer
+            this.socket.emit('device-switched', {
+                target: viewerId,
+                deviceType: deviceType,
+                deviceId: deviceId,
+                success: true
+            });
+            
+        } catch (error) {
+            console.error('Error in remote device switch:', error);
+            this.socket.emit('device-switched', {
+                target: viewerId,
+                deviceType: deviceType,
+                deviceId: deviceId,
+                success: false,
+                error: error.message
+            });
+        }
+    }
+
+    showVideo() {
+        this.localVideo.style.display = 'block';
+        this.cameraPlaceholder.style.display = 'none';
+    }
+
+    hideVideo() {
+        this.localVideo.srcObject = null;
+        this.localVideo.style.display = 'none';
+        this.cameraPlaceholder.style.display = 'flex';
     }
 
     updateStatus(message, type) {

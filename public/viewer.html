@@ -21,9 +21,32 @@
             <button id="refreshCameras">🔄 Refresh List</button>
         </div>
 
-        <div id="viewingInfo" class="info" style="display: none;">
-            <strong>📺 Now Viewing:</strong> <span id="currentCameraName"></span>
-            <button id="disconnectBtn" style="margin-left: 10px;">Stop Viewing</button>
+        <div id="viewingInfo" class="info viewing-info" style="display: none;">
+            <div class="viewing-header">
+                <div class="viewing-title">
+                    <strong>📺 Now Viewing:</strong> <span id="currentCameraName"></span>
+                </div>
+                <button id="disconnectBtn" class="stop-button">⏹️ Stop Viewing</button>
+            </div>
+            
+            <div class="device-controls">
+                <h4>🔧 Remote Device Control</h4>
+                <div>
+                    <div>
+                        <label for="remoteVideoSelect">📹 Switch Camera:</label>
+                        <select id="remoteVideoSelect">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="remoteAudioSelect">🎤 Switch Microphone:</label>
+                        <select id="remoteAudioSelect">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <button id="refreshDevicesBtn">🔄 Refresh Devices</button>
+                </div>
+            </div>
         </div>
 
         <div class="video-container">

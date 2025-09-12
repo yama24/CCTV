@@ -19,24 +19,42 @@
 
         <div class="camera-config">
             <div class="form-group">
-                <label for="cameraName">Camera Name:</label>
+                <label for="cameraName">🏷️ Camera Name:</label>
                 <input type="text" id="cameraName" placeholder="e.g., Living Room, Front Door, Garden" value="">
             </div>
             <div class="form-group">
-                <label for="deviceInfo">Device Description:</label>
+                <label for="deviceInfo">💻 Device Description:</label>
                 <input type="text" id="deviceInfo" placeholder="e.g., Laptop Camera, USB Webcam" value="">
+            </div>
+            <div class="form-group">
+                <label for="videoDeviceSelect">📹 Camera Device:</label>
+                <select id="videoDeviceSelect">
+                    <option value="">Loading cameras...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="audioDeviceSelect">🎤 Microphone Device:</label>
+                <select id="audioDeviceSelect">
+                    <option value="">Loading microphones...</option>
+                </select>
             </div>
         </div>
 
         <div class="video-container">
             <video id="localVideo" autoplay muted playsinline></video>
+            <div id="cameraPlaceholder" class="video-placeholder">
+                <div class="placeholder-content">
+                    <h3>📷 Camera Not Started</h3>
+                    <p>Configure your settings and click "Start Camera" to begin streaming</p>
+                </div>
+            </div>
         </div>
 
         <div class="controls">
-            <button id="startBtn">Start Camera</button>
-            <button id="stopBtn" disabled>Stop Camera</button>
-            <button onclick="location.href='/viewer'">View Streams</button>
-            <button onclick="location.href='/logout'">Logout</button>
+            <button id="startBtn">▶️ Start Camera</button>
+            <button id="stopBtn" disabled>⏹️ Stop Camera</button>
+            <button onclick="location.href='/viewer'">👁️ View Streams</button>
+            <button onclick="location.href='/logout'">🚪 Logout</button>
         </div>
 
         <div id="status" class="status disconnected">

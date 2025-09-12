@@ -170,6 +170,48 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Device switching functionality
+    socket.on('request-device-list', (data) => {
+        if (socket.role === 'viewer' && socket.roomId) {
+            const room = rooms.get(socket.roomId);
+            if (room && room.camera) {
+                io.to(room.camera).emit('request-device-list', {
+                    viewerId: socket.id
+                });
+            }
+        }
+    });
+
+    socket.on('device-list', (data) => {
+        socket.to(data.target).emit('device-list', {
+            devices: data.devices,
+            sender: socket.id
+        });
+    });
+
+    socket.on('switch-device-request', (data) => {
+        if (socket.role === 'viewer' && socket.roomId) {
+            const room = rooms.get(socket.roomId);
+            if (room && room.camera) {
+                io.to(room.camera).emit('switch-device-request', {
+                    deviceType: data.deviceType,
+                    deviceId: data.deviceId,
+                    viewerId: socket.id
+                });
+            }
+        }
+    });
+
+    socket.on('device-switched', (data) => {
+        socket.to(data.target).emit('device-switched', {
+            deviceType: data.deviceType,
+            deviceId: data.deviceId,
+            success: data.success,
+            error: data.error,
+            sender: socket.id
+        });
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
