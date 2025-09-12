@@ -5,6 +5,16 @@ body {
     background-color: #f0f0f0;
 }
 
+/* Prevent horizontal overflow on all screen sizes */
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    overflow-x: hidden;
+    width: 100%;
+}
+
 /* Navigation Styles */
 .navbar {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -29,19 +39,29 @@ body {
 .nav-link {
     color: white;
     text-decoration: none;
-    padding: 8px 15px;
-    border-radius: 20px;
-    transition: background-color 0.3s ease;
+    padding: 10px 16px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
     font-size: 14px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-link:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .nav-link.active {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.35);
     font-weight: bold;
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .user-info {
@@ -106,6 +126,67 @@ button {
 
 button:hover {
     background: #0056b3;
+}
+
+/* Camera control buttons */
+.camera-controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.btn-primary {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-secondary {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
 }
 
 button:disabled {
@@ -549,29 +630,325 @@ button:disabled {
     box-shadow: 0 2px 6px rgba(23,162,184,0.3);
 }
 
-/* Responsive design for device controls */
+/* Mobile Navigation Styles */
+.hamburger-menu {
+    display: none;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    outline: none;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+
+.hamburger-menu:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.hamburger-menu:active {
+    background-color: rgba(255, 255, 255, 0.3);
+    transform: scale(0.98);
+}
+
+/* Mobile Responsive Styles */
 @media (max-width: 768px) {
+    .navbar {
+        padding: 10px 15px;
+        flex-wrap: nowrap;
+        position: relative;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .nav-brand {
+        font-size: 1.1em;
+        order: 1;
+        flex: 1;
+    }
+    
+    .hamburger-menu {
+        display: block;
+        margin-left: auto;
+        flex-shrink: 0;
+        order: 2;
+    }
+    
+    .nav-links {
+        display: none;
+        width: calc(100% - 30px);
+        flex-direction: column;
+        gap: 5px;
+        margin: 15px auto 0 auto;
+        background: rgba(0, 0, 0, 0.85);
+        border-radius: 12px;
+        padding: 20px;
+        animation: slideDown 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        box-sizing: border-box;
+        position: absolute;
+        left: 15px;
+        right: 15px;
+        top: 100%;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+    }
+    
+    .nav-links.active {
+        display: flex;
+    }
+    
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .nav-link {
+        width: 100%;
+        text-align: center;
+        padding: 16px 20px;
+        margin: 4px 0;
+        border-radius: 8px;
+        font-size: 16px;
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        box-sizing: border-box;
+    }
+    
+    .nav-link:active {
+        transform: scale(0.98);
+        background-color: rgba(255, 255, 255, 0.4);
+    }
+    
+    .container {
+        margin: 10px;
+        padding: 15px;
+        overflow-x: hidden;
+        width: calc(100% - 20px);
+        box-sizing: border-box;
+    }
+    
+    .viewing-info {
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .header h1 {
+        font-size: 1.5em;
+    }
+    
+    /* Device controls mobile styles */
+    .device-controls {
+        margin: 10px 0;
+        padding: 15px;
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .device-controls h4 {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
     .device-controls > div {
-        grid-template-columns: 1fr;
-        gap: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .device-controls > div > div {
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+        margin-bottom: 15px;
+    }
+    
+    .device-controls label {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .device-controls select {
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+        max-width: 100%;
+        margin-top: 5px;
+    }
+    
+    .device-controls label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
     }
     
     .device-controls button {
         width: 100%;
         min-width: unset;
+        padding: 12px;
+        font-size: 16px;
+        box-sizing: border-box;
+        margin-top: 10px;
+    }
+    
+    /* General button improvements for mobile */
+    button {
+        width: 100%;
+        max-width: 300px;
+        margin: 5px auto;
+        display: block;
+        box-sizing: border-box;
+        text-align: center;
+    }
+    
+    .controls {
+        text-align: center;
+        padding: 0 10px;
+    }
+    
+    .controls button {
+        margin: 8px auto;
+        padding: 12px 20px;
+        min-height: 48px;
+    }
+    
+    .camera-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+        width: 100%;
+        justify-content: center;
+        min-height: 50px;
+        font-size: 16px;
+    }
+    
+    .stop-button {
+        width: auto;
+        max-width: 200px;
+        margin: 0 auto;
+        padding: 10px 20px;
+        min-height: 44px;
+    }
+    
+    .viewing-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+        width: 100%;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+    
+    .viewing-title {
+        width: 100%;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-sizing: border-box;
+    }
+    
+    .viewing-header .stop-button {
+        align-self: center;
+        width: auto;
+        max-width: 200px;
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 480px) {
+    .navbar {
+        padding: 8px 10px;
+    }
+    
+    .nav-brand {
+        font-size: 1em;
+    }
+    
+    .nav-link {
+        font-size: 14px;
+        padding: 10px 12px;
+    }
+    
+    .container {
+        margin: 5px;
+        padding: 10px;
+    }
+    
+    .header {
+        margin-bottom: 20px;
+    }
+    
+    .header h1 {
+        font-size: 1.3em;
+        margin-bottom: 5px;
+    }
+    
+    .header p {
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+    
     .device-controls {
-        padding: 15px;
+        padding: 10px;
+        margin: 5px;
     }
     
     .device-controls > div {
-        gap: 12px;
+        gap: 10px;
+    }
+    
+    .device-controls > div > div {
+        margin-bottom: 8px;
     }
     
     .device-controls select {
         min-width: unset;
+        padding: 10px;
+        font-size: 16px;
+        width: 100%;
+    }
+    
+    .device-controls label {
+        font-size: 14px;
+    }
+    
+    /* Additional button improvements for smaller screens */
+    button {
+        font-size: 14px;
+        padding: 10px 16px;
+        margin: 6px auto;
+    }
+    
+    .controls button {
+        padding: 10px 16px;
+        min-height: 44px;
+    }
+    
+    .stop-button {
+        font-size: 13px;
+        padding: 8px 16px;
+        min-height: 40px;
     }
 }

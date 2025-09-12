@@ -254,7 +254,10 @@
             <div class="nav-brand">
                 <strong>🏠 CCTV System</strong>
             </div>
-            <div class="nav-links">
+            <button class="hamburger-menu" onclick="toggleMobileMenu()" aria-label="Toggle navigation menu">
+                ☰
+            </button>
+            <div class="nav-links" id="navLinks">
                 <a href="/camera" class="nav-link">📹 Camera</a>
                 <a href="/viewer" class="nav-link">👁️ Viewer</a>
                 <a href="/admin" class="nav-link active">⚙️ Admin</a>
@@ -398,6 +401,30 @@
         
         // Auto-refresh stats every 60 seconds
         setInterval(loadStats, 60000);
+        
+        // Mobile hamburger menu toggle
+        function toggleMobileMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+        
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                const navLinks = document.getElementById('navLinks');
+                navLinks.classList.remove('active');
+            });
+        });
+        
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const navbar = document.querySelector('.navbar');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!navbar.contains(e.target) && navLinks.classList.contains('active')) {
+                navLinks.classList.remove('active');
+            }
+        });
     </script>
 </body>
 </html>

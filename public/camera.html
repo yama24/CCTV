@@ -12,7 +12,10 @@
             <div class="nav-brand">
                 <strong>🏠 CCTV System</strong>
             </div>
-            <div class="nav-links">
+            <button class="hamburger-menu" onclick="toggleMobileMenu()" aria-label="Toggle navigation menu">
+                ☰
+            </button>
+            <div class="nav-links" id="navLinks">
                 <a href="/camera" class="nav-link active">📹 Camera</a>
                 <a href="/viewer" class="nav-link">👁️ Viewer</a>
                 <a href="/admin" class="nav-link admin-only" style="display: none;">⚙️ Admin</a>
@@ -51,9 +54,9 @@
                     <option value="">Loading microphones...</option>
                 </select>
             </div>
-            <div class="form-group" style="margin-top: 20px;">
-                <button id="startBtn" style="margin-right: 10px;">▶️ Start Camera</button>
-                <button id="stopBtn" disabled>⏹️ Stop Camera</button>
+            <div class="form-group camera-controls">
+                <button id="startBtn" class="btn-primary">▶️ Start Camera</button>
+                <button id="stopBtn" class="btn-secondary" disabled>⏹️ Stop Camera</button>
             </div>
         </div>
 
@@ -87,5 +90,30 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/camera.js"></script>
+    <script>
+        // Mobile hamburger menu toggle
+        function toggleMobileMenu() {
+            const navLinks = document.getElementById('navLinks');
+            navLinks.classList.toggle('active');
+        }
+        
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                const navLinks = document.getElementById('navLinks');
+                navLinks.classList.remove('active');
+            });
+        });
+        
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const navbar = document.querySelector('.navbar');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (!navbar.contains(e.target) && navLinks.classList.contains('active')) {
+                navLinks.classList.remove('active');
+            }
+        });
+    </script>
 </body>
 </html>
