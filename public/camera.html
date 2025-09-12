@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV Camera - Home Security</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Home CCTV Camera</h1>
+            <p>This device is streaming your home security feed</p>
+        </div>
+
+        <div class="info">
+            <strong>📡 Camera Setup:</strong> Configure your camera name and start streaming.
+        </div>
+
+        <div class="camera-config">
+            <div class="form-group">
+                <label for="cameraName">Camera Name:</label>
+                <input type="text" id="cameraName" placeholder="e.g., Living Room, Front Door, Garden" value="">
+            </div>
+            <div class="form-group">
+                <label for="deviceInfo">Device Description:</label>
+                <input type="text" id="deviceInfo" placeholder="e.g., Laptop Camera, USB Webcam" value="">
+            </div>
+        </div>
+
+        <div class="video-container">
+            <video id="localVideo" autoplay muted playsinline></video>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn">Start Camera</button>
+            <button id="stopBtn" disabled>Stop Camera</button>
+            <button onclick="location.href='/viewer'">View Streams</button>
+            <button onclick="location.href='/logout'">Logout</button>
+        </div>
+
+        <div id="status" class="status disconnected">
+            📴 Camera not started
+        </div>
+
+        <div class="info">
+            <h3>📋 Instructions:</h3>
+            <ul>
+                <li><strong>Name your camera</strong> to identify it in the viewer</li>
+                <li><strong>Add device info</strong> to help distinguish multiple cameras</li>
+                <li><strong>Click "Start Camera"</strong> to begin streaming</li>
+                <li><strong>Keep this page open</strong> to maintain the stream</li>
+                <li><strong>Multiple cameras</strong> can run simultaneously on different devices</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/camera.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV Viewer - Home Security</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👁️ Home CCTV Viewer</h1>
+            <p>Select and view your home security cameras</p>
+        </div>
+
+        <div class="camera-list">
+            <h3>📹 Click any camera to view instantly</h3>
+            <div id="cameraList">
+                <div class="info">🔄 Loading available cameras...</div>
+            </div>
+            <button id="refreshCameras">🔄 Refresh List</button>
+        </div>
+
+        <div id="viewingInfo" class="info" style="display: none;">
+            <strong>📺 Now Viewing:</strong> <span id="currentCameraName"></span>
+            <button id="disconnectBtn" style="margin-left: 10px;">Stop Viewing</button>
+        </div>
+
+        <div class="video-container">
+            <video id="remoteVideo" autoplay playsinline controls></video>
+            <div id="videoPlaceholder" class="video-placeholder">
+                <div class="placeholder-content">
+                    <h3>🎥 Select a Camera Above</h3>
+                    <p>Click on any available camera to start viewing</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="location.href='/camera'">📹 Camera Setup</button>
+            <button onclick="location.href='/logout'">🚪 Logout</button>
+        </div>
+
+        <div id="status" class="status disconnected">
+            📱 Ready to connect
+        </div>
+
+        <div class="info">
+            <h3>📋 Easy Camera Switching:</h3>
+            <ul>
+                <li><strong>Click any camera</strong> in the list above to view instantly</li>
+                <li><strong>Switch cameras</strong> by clicking on a different camera</li>
+                <li><strong>Auto-disconnect</strong> from previous camera when switching</li>
+                <li><strong>Multiple cameras</strong> can be active simultaneously</li>
+                <li><strong>Real-time updates</strong> when cameras go online/offline</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/viewer.js"></script>
+</body>
+</html>
