@@ -45,7 +45,7 @@ app.use(session({
     saveUninitialized: false,
     cookie: { 
         secure: 'auto',  // Automatically detect HTTPS
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: 24 * 60 * 60 * 1000 * 100, // 24 hours * 100
         httpOnly: true,
         sameSite: 'lax'
     }
