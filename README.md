@@ -35,8 +35,16 @@ A secure home CCTV system that streams video and audio using WebRTC technology. 
    ```
 
 4. **Start the server:**
+   
+   **Development (foreground):**
    ```bash
    npm start
+   ```
+   
+   **Production (background with PM2):**
+   ```bash
+   npm install -g pm2
+   npm run pm2:start
    ```
 
 5. **Access locally:**
@@ -49,12 +57,14 @@ A secure home CCTV system that streams video and audio using WebRTC technology. 
 ├── server.js           # Main server application
 ├── database.js         # Database management
 ├── package.json        # Dependencies and scripts
+├── ecosystem.config.js # PM2 configuration
 ├── config/            # Server configuration files
 │   ├── apache2-vhost.conf
 │   └── nginx-vhost.conf
 ├── docs/              # Documentation
 │   ├── DATABASE_README.md
 │   ├── DEPLOYMENT_GUIDE.md
+│   ├── PM2_GUIDE.md
 │   └── ...
 ├── public/            # Static web files
 │   ├── *.html        # Web pages
@@ -104,6 +114,24 @@ node scripts/user-manager.js
 # Quick commands
 node scripts/user-manager.js add    # Add user directly
 node scripts/user-manager.js list   # List all users
+```
+
+### PM2 Process Management
+```bash
+# Start with PM2 (production)
+npm run pm2:start
+
+# Stop PM2 process
+npm run pm2:stop
+
+# Restart PM2 process
+npm run pm2:restart
+
+# View logs
+npm run pm2:logs
+
+# Monitor resources
+npm run pm2:monit
 ```
 
 ### Database Maintenance
