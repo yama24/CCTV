@@ -324,15 +324,160 @@ class UserManager {
         }
     }
 
+    async resetFailedAttempts() {
+        console.log('\n🔄 Reset Failed Login Attempts\n');
+        
+        try {
+            // First show users with failed attempts
+            console.log('📊 Current users with failed login attempts:');
+            const usersWithFailedAttempts = await new Promise((resolve, reject) => {
+                this.db.db.all(
+                    `SELECT u.username, u.full_name, COUNT(la.id) as failed_attempts,
+                            MAX(la.timestamp) as last_failed_attempt
+                     FROM users u 
+                     JOIN login_attempts la ON u.username = la.username 
+                     WHERE la.success = 0 
+                     AND la.timestamp > datetime('now', '-24 hours')
+                     GROUP BY u.username, u.full_name
+                     ORDER BY failed_attempts DESC`,
+                    (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows || []);
+                    }
+                );
+            });
+
+            if (usersWithFailedAttempts.length === 0) {
+                console.log('✅ No users with failed login attempts in the last 24 hours');
+                return;
+            }
+
+            console.log('\nUsername\t\tFailed Attempts\tLast Failed Attempt');
+            console.log('─'.repeat(70));
+            usersWithFailedAttempts.forEach((user, index) => {
+                const lastAttempt = new Date(user.last_failed_attempt).toLocaleString();
+                console.log(`${index + 1}. ${user.username.padEnd(15)}\t${user.failed_attempts}\t\t${lastAttempt}`);
+            });
+
+            const choice = await this.askQuestion('\nEnter username to reset (or "all" to reset all): ');
+            
+            if (!choice) {
+                console.log('❌ Operation cancelled');
+                return;
+            }
+
+            if (choice.toLowerCase() === 'all') {
+                // Reset all failed attempts
+                const result = await new Promise((resolve, reject) => {
+                    this.db.db.run(
+                        'DELETE FROM login_attempts WHERE success = 0',
+                        function(err) {
+                            if (err) reject(err);
+                            else resolve(this.changes);
+                        }
+                    );
+                });
+                console.log(`✅ Reset failed login attempts for all users (${result} records removed)`);
+            } else {
+                // Validate username exists
+                const user = await new Promise((resolve, reject) => {
+                    this.db.getUserByUsername(choice, (err, user) => {
+                        if (err) reject(err);
+                        else resolve(user);
+                    });
+                });
+
+                if (!user) {
+                    console.log('❌ User not found');
+                    return;
+                }
+
+                // Check current failed attempts for this user
+                const failedCount = await new Promise((resolve, reject) => {
+                    this.db.getFailedLoginAttemptsCount(choice, 24 * 60, (err, count) => {
+                        if (err) reject(err);
+                        else resolve(count);
+                    });
+                });
+
+                if (failedCount === 0) {
+                    console.log(`ℹ️  User "${choice}" has no recent failed login attempts`);
+                    return;
+                }
+
+                // Reset failed attempts for specific user
+                const result = await new Promise((resolve, reject) => {
+                    this.db.resetFailedLoginAttempts(choice, (err, changes) => {
+                        if (err) reject(err);
+                        else resolve(changes);
+                    });
+                });
+
+                console.log(`✅ Reset ${result} failed login attempts for user "${choice}"`);
+                console.log(`🔓 User "${choice}" can now login normally`);
+            }
+
+        } catch (error) {
+            console.error('❌ Error resetting failed attempts:', error.message);
+        }
+    }
+
+    async resetFailedAttemptsForUser(username) {
+        console.log(`🔄 Resetting failed login attempts for user: ${username}\n`);
+        
+        try {
+            // Validate username exists
+            const user = await new Promise((resolve, reject) => {
+                this.db.getUserByUsername(username, (err, user) => {
+                    if (err) reject(err);
+                    else resolve(user);
+                });
+            });
+
+            if (!user) {
+                console.log('❌ User not found');
+                return;
+            }
+
+            // Check current failed attempts
+            const failedCount = await new Promise((resolve, reject) => {
+                this.db.getFailedLoginAttemptsCount(username, 24 * 60, (err, count) => {
+                    if (err) reject(err);
+                    else resolve(count);
+                });
+            });
+
+            if (failedCount === 0) {
+                console.log(`ℹ️  User "${username}" has no recent failed login attempts`);
+                return;
+            }
+
+            // Reset failed attempts
+            const result = await new Promise((resolve, reject) => {
+                this.db.resetFailedLoginAttempts(username, (err, changes) => {
+                    if (err) reject(err);
+                    else resolve(changes);
+                });
+            });
+
+            console.log(`✅ Reset ${result} failed login attempts for user "${username}"`);
+            console.log(`🔓 User "${username}" can now login normally`);
+
+        } catch (error) {
+            console.error('❌ Error resetting failed attempts:', error.message);
+        }
+    }
+
     async showMenu() {
         console.log('\n🔐 CCTV User Management\n');
         console.log('1. Add new user');
         console.log('2. List all users');
         console.log('3. Change user password');
         console.log('4. Delete (deactivate) user');
-        console.log('5. Exit');
+        console.log('5. Reset failed login attempts');
+        console.log('6. Exit');
         
-        const choice = await this.askQuestion('\nSelect option (1-5): ');
+        const choice = await this.askQuestion('\nSelect option (1-6): ');
         
         switch (choice) {
             case '1':
@@ -348,6 +493,9 @@ class UserManager {
                 await this.deleteUser();
                 break;
             case '5':
+                await this.resetFailedAttempts();
+                break;
+            case '6':
                 console.log('👋 Goodbye!');
                 this.cleanup();
                 return false;
@@ -396,8 +544,30 @@ if (args.length > 0) {
                     userManager.cleanup();
                 });
                 break;
+            case 'reset-attempts':
+                if (args[1]) {
+                    // Reset for specific user
+                    userManager.resetFailedAttemptsForUser(args[1]).then(() => {
+                        userManager.cleanup();
+                    }).catch((error) => {
+                        console.error('❌ Error:', error.message);
+                        userManager.cleanup();
+                    });
+                } else {
+                    // Interactive reset
+                    userManager.resetFailedAttempts().then(() => {
+                        userManager.cleanup();
+                    }).catch((error) => {
+                        console.error('❌ Error:', error.message);
+                        userManager.cleanup();
+                    });
+                }
+                break;
             default:
-                console.log('Usage: node scripts/user-manager.js [add|list]');
+                console.log('Usage: node scripts/user-manager.js [add|list|reset-attempts [username]]');
+                console.log('Examples:');
+                console.log('  node scripts/user-manager.js reset-attempts          # Interactive reset');
+                console.log('  node scripts/user-manager.js reset-attempts john    # Reset for specific user');
                 console.log('Or run without arguments for interactive menu');
                 userManager.cleanup();
         }

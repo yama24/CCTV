@@ -335,19 +335,26 @@ app.post('/api/auth/validate', (req, res) => {
 // API endpoint to get active cameras
 app.get('/api/cameras', requireApiAuth, (req, res) => {
     const userRole = req.user.role;
+    const userId = req.user.userId;
     
-    const cameraList = Array.from(cameras.entries()).map(([roomId, info]) => ({
+    let cameraList = Array.from(cameras.entries()).map(([roomId, info]) => ({
         roomId,
         name: info.name,
         deviceInfo: info.deviceInfo,
         connectedAt: info.connectedAt,
         status: info.status,
+        userId: info.userId,
         // Only show owner info to admins
         ...(userRole === 'admin' && { 
-            userId: info.userId,
             ownerInfo: `User ID: ${info.userId}` 
         })
     }));
+    
+    // Filter cameras based on user role
+    if (userRole !== 'admin') {
+        // Non-admin users can only see their own cameras
+        cameraList = cameraList.filter(camera => camera.userId === userId);
+    }
     
     res.json(cameraList);
 });
@@ -473,6 +480,26 @@ io.on('connection', (socket) => {
             return;
         }
         
+        // Check access permissions for viewers
+        if (role === 'viewer') {
+            const existingCamera = cameras.get(roomId);
+            if (existingCamera) {
+                // Non-admin users can only view their own cameras
+                if (socket.user.role !== 'admin' && existingCamera.userId !== socket.user.userId) {
+                    socket.emit('error', { 
+                        message: 'Access denied: You can only view your own cameras' 
+                    });
+                    return;
+                }
+            } else {
+                // Camera doesn't exist
+                socket.emit('error', { 
+                    message: 'Camera not found or not currently active' 
+                });
+                return;
+            }
+        }
+        
         socket.join(roomId);
         socket.role = role;
         socket.roomId = roomId;
@@ -507,11 +534,22 @@ io.on('connection', (socket) => {
             }, () => {});
             
             console.log(`Camera "${cameraName}" joined room ${roomId} by user ${socket.user.username}`);
-            // Notify all connected clients about camera list update
-            io.emit('cameras-updated', Array.from(cameras.entries()).map(([id, info]) => ({
-                roomId: id,
-                ...info
-            })));
+            // Notify clients about camera list update (filtered per user)
+            io.sockets.sockets.forEach((clientSocket) => {
+                if (clientSocket.user && clientSocket.user.authenticated) {
+                    let userCameras = Array.from(cameras.entries()).map(([id, info]) => ({
+                        roomId: id,
+                        ...info
+                    }));
+                    
+                    // Filter cameras for non-admin users
+                    if (clientSocket.user.role !== 'admin') {
+                        userCameras = userCameras.filter(cam => cam.userId === clientSocket.user.userId);
+                    }
+                    
+                    clientSocket.emit('cameras-updated', userCameras);
+                }
+            });
         } else if (role === 'viewer') {
             room.viewers.push(socket.id);
             
@@ -527,11 +565,18 @@ io.on('connection', (socket) => {
             }, () => {});
             
             console.log(`Viewer joined room ${roomId} by user ${socket.user.username}`);
-            // Send current camera list to the new viewer
-            socket.emit('cameras-updated', Array.from(cameras.entries()).map(([id, info]) => ({
+            // Send current camera list to the new viewer (filtered by ownership)
+            let userCameras = Array.from(cameras.entries()).map(([id, info]) => ({
                 roomId: id,
                 ...info
-            })));
+            }));
+            
+            // Filter cameras for non-admin users
+            if (socket.user.role !== 'admin') {
+                userCameras = userCameras.filter(cam => cam.userId === socket.user.userId);
+            }
+            
+            socket.emit('cameras-updated', userCameras);
             // If camera is already in room, notify viewer
             if (room.camera) {
                 socket.emit('camera-available');
@@ -546,6 +591,15 @@ io.on('connection', (socket) => {
             return;
         }
         
+        // Verify the user has access to the camera in this room
+        if (socket.role === 'camera' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+        }
+        
         socket.to(data.target).emit('offer', {
             offer: data.offer,
             sender: socket.id
@@ -558,6 +612,15 @@ io.on('connection', (socket) => {
             return;
         }
         
+        // Verify the user has access to view the camera in this room
+        if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+        }
+        
         socket.to(data.target).emit('answer', {
             answer: data.answer,
             sender: socket.id
@@ -568,6 +631,15 @@ io.on('connection', (socket) => {
         if (!socket.user || !socket.user.authenticated) {
             socket.emit('error', { message: 'Authentication required' });
             return;
+        }
+        
+        // Verify access to the room/camera
+        if (socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
         }
         
         socket.to(data.target).emit('ice-candidate', {
@@ -584,6 +656,12 @@ io.on('connection', (socket) => {
         }
         
         if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
             const room = rooms.get(socket.roomId);
             if (room && room.camera) {
                 io.to(room.camera).emit('viewer-requesting-offer', {
@@ -601,6 +679,12 @@ io.on('connection', (socket) => {
         }
         
         if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
             const room = rooms.get(socket.roomId);
             if (room && room.camera) {
                 io.to(room.camera).emit('request-device-list', {
@@ -629,6 +713,12 @@ io.on('connection', (socket) => {
         }
         
         if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
             const room = rooms.get(socket.roomId);
             if (room && room.camera) {
                 io.to(room.camera).emit('switch-device-request', {
@@ -684,11 +774,22 @@ io.on('connection', (socket) => {
                 cameras.delete(socket.roomId);
                 // Notify all viewers that camera is disconnected
                 socket.to(socket.roomId).emit('camera-disconnected');
-                // Notify all clients about camera list update
-                io.emit('cameras-updated', Array.from(cameras.entries()).map(([id, info]) => ({
-                    roomId: id,
-                    ...info
-                })));
+                // Notify all clients about camera list update (filtered per user)
+                io.sockets.sockets.forEach((clientSocket) => {
+                    if (clientSocket.user && clientSocket.user.authenticated) {
+                        let userCameras = Array.from(cameras.entries()).map(([id, info]) => ({
+                            roomId: id,
+                            ...info
+                        }));
+                        
+                        // Filter cameras for non-admin users
+                        if (clientSocket.user.role !== 'admin') {
+                            userCameras = userCameras.filter(cam => cam.userId === clientSocket.user.userId);
+                        }
+                        
+                        clientSocket.emit('cameras-updated', userCameras);
+                    }
+                });
             } else if (socket.role === 'viewer') {
                 // Log viewer disconnection
                 if (socket.user) {

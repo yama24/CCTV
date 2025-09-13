@@ -96,6 +96,16 @@ class CCTVViewer {
         adminLinks.forEach(link => {
             link.style.display = user.role === 'admin' ? 'inline-block' : 'none';
         });
+
+        // Update role-specific security note
+        const roleNote = document.getElementById('role-specific-note');
+        if (roleNote) {
+            if (user.role === 'admin') {
+                roleNote.innerHTML = 'As an admin, you can view all cameras in the system.';
+            } else {
+                roleNote.innerHTML = 'Other users cannot access your cameras.';
+            }
+        }
     }
 
     async validateToken() {
@@ -171,6 +181,21 @@ class CCTVViewer {
             if (error.message && error.message.includes('Authentication')) {
                 alert('Authentication failed. Please log in again.');
                 window.location.href = '/login';
+            } else if (error.message && error.message.includes('Access denied')) {
+                // Handle access denied errors gracefully
+                this.updateStatus(`❌ ${error.message}`, 'disconnected');
+                if (this.isConnecting) {
+                    this.isConnecting = false;
+                    this.currentCamera = null;
+                    this.viewingInfo.style.display = 'none';
+                    this.renderCameraList();
+                }
+                // Show a user-friendly message
+                setTimeout(() => {
+                    this.updateStatus('🔌 Connected - Click any camera to view', 'connected');
+                }, 3000);
+            } else {
+                this.updateStatus(`❌ Error: ${error.message || 'Unknown error'}`, 'disconnected');
             }
         });
 
@@ -245,10 +270,17 @@ class CCTVViewer {
 
     renderCameraList() {
         if (this.availableCameras.length === 0) {
+            const message = this.currentUser && this.currentUser.role === 'admin' 
+                ? 'No cameras currently active in the system'
+                : 'You have no active cameras';
+            
             this.cameraList.innerHTML = `
                 <div class="info">
-                    📵 No cameras available<br>
-                    <small>Start a camera on any device to see it here</small>
+                    📵 ${message}<br>
+                    <small>Start a camera from the Camera page to see it here</small><br>
+                    <small style="color: #666; margin-top: 5px; display: block;">
+                        🔒 Remember: You can only view cameras that belong to your account
+                    </small>
                 </div>
             `;
             return;

@@ -253,6 +253,35 @@ class Database {
         );
     }
 
+    // Reset failed login attempts for a specific user
+    resetFailedLoginAttempts(username, callback) {
+        this.db.run(
+            `DELETE FROM login_attempts 
+             WHERE username = ? AND success = 0`,
+            [username],
+            function(err) {
+                if (callback) {
+                    callback(err, this ? this.changes : 0);
+                }
+            }
+        );
+    }
+
+    // Get failed login attempts count for a user
+    getFailedLoginAttemptsCount(username, minutes = 15, callback) {
+        this.db.get(
+            `SELECT COUNT(*) as count FROM login_attempts 
+             WHERE username = ? AND success = 0 
+             AND timestamp > datetime('now', '-${minutes} minutes')`,
+            [username],
+            (err, row) => {
+                if (callback) {
+                    callback(err, row ? row.count : 0);
+                }
+            }
+        );
+    }
+
     // Settings methods
     getSetting(key, callback) {
         this.db.get(

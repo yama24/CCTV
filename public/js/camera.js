@@ -24,8 +24,12 @@ class CCTVCamera {
         
         this.initializeEventListeners();
         this.initializeDefaults();
+        this.detectBrowserAndDevice();
         this.loadAvailableDevices();
         this.hideVideo(); // Initially hide video until camera starts
+        
+        // Listen for device changes
+        this.setupDeviceChangeListeners();
         
         // Initialize authentication and socket connection
         this.initializeAuthentication();
@@ -333,8 +337,8 @@ class CCTVCamera {
                 constraints.audio.deviceId = { exact: this.currentDevices.audio };
             }
             
-            // Get user media with selected devices
-            this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            // Get user media with selected devices using safe method
+            this.localStream = await this.getUserMediaSafely(constraints);
 
             this.localVideo.srcObject = this.localStream;
             this.showVideo();
@@ -355,7 +359,27 @@ class CCTVCamera {
 
         } catch (error) {
             console.error('Error starting camera:', error);
-            this.updateStatus('❌ Error starting camera: ' + error.message, 'disconnected');
+            
+            let errorMessage = 'Error starting camera: ';
+            
+            // Provide specific error messages for common issues
+            if (error.name === 'NotAllowedError') {
+                errorMessage = '❌ Camera access denied. Please allow camera permissions and try again.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage = '❌ No camera found. Please connect a camera and try again.';
+            } else if (error.name === 'NotSupportedError') {
+                errorMessage = '❌ Camera not supported on this device/browser.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage = '❌ Camera is being used by another application. Please close other apps and try again.';
+            } else if (error.name === 'OverconstrainedError') {
+                errorMessage = '❌ Camera constraints not supported. Please try different settings.';
+            } else if (error.message.includes('HTTPS')) {
+                errorMessage = '❌ HTTPS required for camera access on this device.';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            this.updateStatus(errorMessage, 'error');
         }
     }
 
@@ -461,19 +485,60 @@ class CCTVCamera {
 
     async loadAvailableDevices() {
         try {
+            // Check if getUserMedia is supported
+            if (!this.checkMediaDevicesSupport()) {
+                this.updateStatus('❌ Camera access not supported on this device/browser', 'error');
+                this.disableCameraControls();
+                return;
+            }
+
+            console.log('Loading available devices...');
+
             // Request permission first to ensure device labels are available
-            await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                .then(stream => {
-                    stream.getTracks().forEach(track => track.stop());
+            // Use a more permissive approach for mobile devices
+            let permissionStream = null;
+            try {
+                permissionStream = await this.getUserMediaSafely({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }, 
+                    audio: true 
                 });
+                console.log('Permission stream obtained');
+                
+                if (permissionStream) {
+                    permissionStream.getTracks().forEach(track => track.stop());
+                }
+            } catch (permError) {
+                console.log('Could not get permission stream, trying device enumeration anyway:', permError);
+            }
+            
+            // Wait a bit for devices to be properly enumerated on mobile
+            await new Promise(resolve => setTimeout(resolve, 500));
             
             const devices = await navigator.mediaDevices.enumerateDevices();
+            console.log('Raw device list:', devices);
             
             this.availableDevices.video = devices.filter(device => device.kind === 'videoinput');
             this.availableDevices.audio = devices.filter(device => device.kind === 'audioinput');
             
-            console.log('Available video devices:', this.availableDevices.video);
-            console.log('Available audio devices:', this.availableDevices.audio);
+            console.log('Available video devices:', this.availableDevices.video.map(d => ({
+                id: d.deviceId,
+                label: d.label,
+                groupId: d.groupId
+            })));
+            console.log('Available audio devices:', this.availableDevices.audio.map(d => ({
+                id: d.deviceId,
+                label: d.label,
+                groupId: d.groupId
+            })));
+            
+            // Special handling for mobile devices that might have multiple cameras
+            if (this.deviceInfo && this.deviceInfo.isMobile) {
+                console.log('Mobile device detected, organizing cameras...');
+                this.organizeMobileCameras();
+            }
             
             this.populateDeviceSelectors();
             
@@ -481,7 +546,120 @@ class CCTVCamera {
             this.extractHostnameFromDevices();
         } catch (error) {
             console.error('Error loading devices:', error);
+            this.updateStatus('⚠️ Could not load camera devices - permissions may be required', 'warning');
         }
+    }
+
+    detectBrowserAndDevice() {
+        const userAgent = navigator.userAgent;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+        const isChrome = /Chrome/.test(userAgent);
+        const isAndroid = /Android/.test(userAgent);
+        
+        console.log(`Device info: Mobile: ${isMobile}, Chrome: ${isChrome}, Android: ${isAndroid}`);
+        console.log(`Protocol: ${location.protocol}, Host: ${location.hostname}`);
+        
+        // Show specific warnings for mobile users
+        if (isMobile && location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            this.updateStatus('⚠️ Mobile devices require HTTPS for camera access', 'warning');
+        }
+        
+        this.deviceInfo = { isMobile, isChrome, isAndroid };
+    }
+
+    checkMediaDevicesSupport() {
+        // Check for navigator.mediaDevices support
+        if (!navigator.mediaDevices) {
+            console.error('navigator.mediaDevices not supported');
+            return false;
+        }
+        
+        // Check for getUserMedia support
+        if (!navigator.mediaDevices.getUserMedia) {
+            console.error('navigator.mediaDevices.getUserMedia not supported');
+            return false;
+        }
+
+        // Check if we're on HTTPS (required for mobile Chrome)
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+            console.error('HTTPS required for camera access on this device');
+            
+            // More specific message for mobile
+            if (this.deviceInfo && this.deviceInfo.isMobile) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    async getUserMediaSafely(constraints) {
+        try {
+            // First check support
+            if (!this.checkMediaDevicesSupport()) {
+                throw new Error('Media devices not supported');
+            }
+
+            // Try modern getUserMedia
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+            console.error('getUserMedia failed:', error);
+            
+            // Try legacy getUserMedia as fallback
+            try {
+                return await this.getLegacyUserMedia(constraints);
+            } catch (legacyError) {
+                console.error('Legacy getUserMedia also failed:', legacyError);
+                throw new Error(`Camera access failed: ${error.message}. Please ensure you're using HTTPS and have granted camera permissions.`);
+            }
+        }
+    }
+
+    getLegacyUserMedia(constraints) {
+        return new Promise((resolve, reject) => {
+            // Legacy getUserMedia support
+            const getUserMedia = navigator.getUserMedia || 
+                               navigator.webkitGetUserMedia || 
+                               navigator.mozGetUserMedia || 
+                               navigator.msGetUserMedia;
+            
+            if (!getUserMedia) {
+                reject(new Error('No getUserMedia support found'));
+                return;
+            }
+
+            getUserMedia.call(navigator, constraints, resolve, reject);
+        });
+    }
+
+    disableCameraControls() {
+        this.startBtn.disabled = true;
+        this.startBtn.textContent = '❌ Camera Not Available';
+        
+        // Show helpful error message
+        this.updateStatus('📱 Camera access requires HTTPS on mobile devices. Please access via https:// or use desktop browser.', 'error');
+    }
+
+    organizeMobileCameras() {
+        // Mobile devices often have front and back cameras
+        // Try to organize them in a logical order (back camera first, then front)
+        this.availableDevices.video.sort((a, b) => {
+            const aLabel = a.label.toLowerCase();
+            const bLabel = b.label.toLowerCase();
+            
+            // Back camera should come first
+            if (aLabel.includes('back') && !bLabel.includes('back')) return -1;
+            if (!aLabel.includes('back') && bLabel.includes('back')) return 1;
+            
+            // Then front camera
+            if (aLabel.includes('front') && !bLabel.includes('front')) return -1;
+            if (!aLabel.includes('front') && bLabel.includes('front')) return 1;
+            
+            // Otherwise keep original order
+            return 0;
+        });
+        
+        console.log('Organized mobile cameras:', this.availableDevices.video.map(d => d.label));
     }
 
     extractHostnameFromDevices() {
@@ -506,14 +684,32 @@ class CCTVCamera {
             this.availableDevices.video.forEach((device, index) => {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
-                option.textContent = device.label || `Camera ${index + 1}`;
+                
+                // Better labeling for mobile devices
+                let label = device.label || `Camera ${index + 1}`;
+                
+                // Add helpful indicators for mobile cameras
+                if (this.deviceInfo && this.deviceInfo.isMobile) {
+                    if (label.toLowerCase().includes('back')) {
+                        label += ' 📷 (Rear)';
+                    } else if (label.toLowerCase().includes('front')) {
+                        label += ' 🤳 (Front)';
+                    } else if (index === 0) {
+                        label += ' (Primary)';
+                    }
+                }
+                
+                option.textContent = label;
+                option.title = `Device ID: ${device.deviceId}`;
                 videoSelect.appendChild(option);
             });
             
             // Select first device by default
             if (this.availableDevices.video.length > 0) {
-                videoSelect.value = this.availableDevices.video[0].deviceId;
-                this.currentDevices.video = this.availableDevices.video[0].deviceId;
+                const firstDevice = this.availableDevices.video[0];
+                videoSelect.value = firstDevice.deviceId;
+                this.currentDevices.video = firstDevice.deviceId;
+                console.log(`Default video device selected: ${firstDevice.label} (${firstDevice.deviceId})`);
             }
         }
         
@@ -523,69 +719,288 @@ class CCTVCamera {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
                 option.textContent = device.label || `Microphone ${index + 1}`;
+                option.title = `Device ID: ${device.deviceId}`;
                 audioSelect.appendChild(option);
             });
             
             // Select first device by default
             if (this.availableDevices.audio.length > 0) {
-                audioSelect.value = this.availableDevices.audio[0].deviceId;
-                this.currentDevices.audio = this.availableDevices.audio[0].deviceId;
+                const firstDevice = this.availableDevices.audio[0];
+                audioSelect.value = firstDevice.deviceId;
+                this.currentDevices.audio = firstDevice.deviceId;
+                console.log(`Default audio device selected: ${firstDevice.label} (${firstDevice.deviceId})`);
             }
+        }
+        
+        // Log device selection summary
+        console.log('Device selectors populated:', {
+            videoDevices: this.availableDevices.video.length,
+            audioDevices: this.availableDevices.audio.length,
+            selectedVideo: this.currentDevices.video,
+            selectedAudio: this.currentDevices.audio
+        });
+    }
+
+    setupDeviceChangeListeners() {
+        // Listen for device changes (when cameras are plugged/unplugged)
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+            navigator.mediaDevices.addEventListener('devicechange', () => {
+                console.log('Device change detected, refreshing device list...');
+                setTimeout(() => {
+                    this.loadAvailableDevices();
+                }, 1000); // Wait a bit for devices to settle
+            });
         }
     }
 
-    async switchDevice(type, deviceId) {
-        if (!this.localStream) return;
+    async fallbackCompleteStreamRestart(targetVideoDevice, targetAudioDevice) {
+        console.log('Attempting fallback: complete stream restart');
         
         try {
+            // Stop current stream completely
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Build new constraints with target devices
             const constraints = {
-                video: type === 'video' ? { deviceId: { exact: deviceId } } : false,
-                audio: type === 'audio' ? { deviceId: { exact: deviceId } } : false
+                video: targetVideoDevice ? {
+                    deviceId: { ideal: targetVideoDevice },
+                    width: { ideal: 640, max: 1280 },
+                    height: { ideal: 480, max: 720 },
+                    frameRate: { ideal: 30, max: 30 }
+                } : true,
+                audio: targetAudioDevice ? {
+                    deviceId: { ideal: targetAudioDevice },
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } : true
             };
             
-            // If switching video, keep current audio
-            if (type === 'video' && this.currentDevices.audio) {
-                constraints.audio = { deviceId: { exact: this.currentDevices.audio } };
-            }
+            console.log('Fallback constraints:', constraints);
             
-            // If switching audio, keep current video
-            if (type === 'audio' && this.currentDevices.video) {
-                constraints.video = { deviceId: { exact: this.currentDevices.video } };
-            }
+            // Get completely new stream
+            const newStream = await this.getUserMediaSafely(constraints);
             
-            const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            // Replace tracks in existing peer connections
-            const newTracks = newStream.getTracks();
-            
-            this.peerConnections.forEach((peerConnection) => {
+            // Replace in all peer connections
+            const replacePromises = [];
+            this.peerConnections.forEach((peerConnection, viewerId) => {
                 const senders = peerConnection.getSenders();
                 
-                newTracks.forEach(newTrack => {
+                newStream.getTracks().forEach(newTrack => {
                     const sender = senders.find(s => 
                         s.track && s.track.kind === newTrack.kind
                     );
                     
                     if (sender) {
-                        sender.replaceTrack(newTrack);
+                        replacePromises.push(
+                            sender.replaceTrack(newTrack).catch(err => {
+                                console.error(`Fallback track replacement failed for ${viewerId}:`, err);
+                                throw err;
+                            })
+                        );
                     }
                 });
             });
             
-            // Stop old tracks
-            this.localStream.getTracks().forEach(track => track.stop());
+            await Promise.all(replacePromises);
             
-            // Update local stream and video element
+            // Update local stream and video
             this.localStream = newStream;
             this.localVideo.srcObject = this.localStream;
-            this.showVideo(); // Ensure video is visible after switching
-            this.currentDevices[type] = deviceId;
+            this.showVideo();
             
-            this.updateStatus(`🔄 Switched ${type} device`, 'connected');
+            // Update device tracking
+            const videoTrack = newStream.getVideoTracks()[0];
+            const audioTrack = newStream.getAudioTracks()[0];
+            
+            if (videoTrack && targetVideoDevice) {
+                this.currentDevices.video = targetVideoDevice;
+            }
+            if (audioTrack && targetAudioDevice) {
+                this.currentDevices.audio = targetAudioDevice;
+            }
+            
+            console.log('Fallback stream restart successful');
+            return true;
+            
+        } catch (error) {
+            console.error('Fallback stream restart failed:', error);
+            throw error;
+        }
+    }
+
+    async switchDevice(type, deviceId) {
+        if (!this.localStream) {
+            throw new Error('No active camera stream to switch');
+        }
+        
+        try {
+            console.log(`Switching ${type} device to:`, deviceId);
+            
+            // Validate that the requested device exists
+            const availableDevices = type === 'video' ? this.availableDevices.video : this.availableDevices.audio;
+            const targetDevice = availableDevices.find(device => device.deviceId === deviceId);
+            
+            if (!targetDevice) {
+                throw new Error(`${type} device with ID ${deviceId} not found`);
+            }
+            
+            console.log(`Target device found:`, targetDevice.label);
+            
+            // Use a more targeted approach: only get a stream for the specific device type we're switching
+            // This reduces camera access conflicts on mobile devices
+            let newTrack = null;
+            let tempStream = null;
+            
+            try {
+                // Build constraints only for the device type we're switching
+                const constraints = {};
+                
+                if (type === 'video') {
+                    constraints.video = {
+                        deviceId: { ideal: deviceId },
+                        width: { ideal: 640, max: 1280 },
+                        height: { ideal: 480, max: 720 },
+                        frameRate: { ideal: 30, max: 30 }
+                    };
+                    // Don't request audio - we'll keep the existing audio track
+                } else {
+                    constraints.audio = {
+                        deviceId: { ideal: deviceId },
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    };
+                    // Don't request video - we'll keep the existing video track
+                }
+                
+                console.log('Targeted device switch constraints:', constraints);
+                
+                // Get stream with only the track we need to switch
+                tempStream = await this.getUserMediaSafely(constraints);
+                
+                // Get the new track of the type we're switching
+                const newTracks = tempStream.getTracks();
+                newTrack = newTracks.find(track => track.kind === (type === 'video' ? 'video' : 'audio'));
+                
+                if (!newTrack) {
+                    throw new Error(`No ${type} track found in new stream`);
+                }
+                
+                console.log(`New ${type} track obtained:`, newTrack.getSettings());
+                
+                // Replace the track in all peer connections first
+                const replacePromises = [];
+                this.peerConnections.forEach((peerConnection, viewerId) => {
+                    console.log(`Replacing ${type} track for viewer: ${viewerId}`);
+                    const senders = peerConnection.getSenders();
+                    
+                    const sender = senders.find(s => 
+                        s.track && s.track.kind === newTrack.kind
+                    );
+                    
+                    if (sender) {
+                        console.log(`Replacing ${newTrack.kind} track for ${viewerId}`);
+                        replacePromises.push(
+                            sender.replaceTrack(newTrack).catch(err => {
+                                console.error(`Failed to replace ${newTrack.kind} track for ${viewerId}:`, err);
+                                throw err; // Re-throw to catch in outer try-catch
+                            })
+                        );
+                    } else {
+                        console.log(`No sender found for ${newTrack.kind} track - this is unexpected`);
+                    }
+                });
+                
+                // Wait for all track replacements to complete
+                await Promise.all(replacePromises);
+                
+                // Find and stop the old track of the same type in the local stream
+                const oldTracks = this.localStream.getTracks();
+                const oldTrack = oldTracks.find(track => track.kind === newTrack.kind);
+                
+                if (oldTrack) {
+                    console.log(`Stopping old ${oldTrack.kind} track`);
+                    oldTrack.stop();
+                    
+                    // Remove old track from stream
+                    this.localStream.removeTrack(oldTrack);
+                }
+                
+                // Add new track to local stream
+                this.localStream.addTrack(newTrack);
+                
+                // Update the video element source to refresh the stream
+                this.localVideo.srcObject = this.localStream;
+                this.showVideo(); // Ensure video is visible after switching
+                
+                // Update current device tracking
+                this.currentDevices[type] = deviceId;
+                
+                // Verify the switch was successful
+                const actualDeviceId = newTrack.getSettings()?.deviceId;
+                console.log(`Device switch completed. Requested: ${deviceId}, Actual: ${actualDeviceId}`);
+                
+                // Clean up temporary stream (but not the track we extracted)
+                if (tempStream) {
+                    tempStream.getTracks().forEach(track => {
+                        if (track !== newTrack) {
+                            track.stop();
+                        }
+                    });
+                }
+                
+                this.updateStatus(`🔄 Switched ${type} device successfully`, 'connected');
+                
+            } catch (streamError) {
+                // Clean up if something went wrong
+                if (tempStream) {
+                    tempStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // Try fallback approach: complete stream restart
+                console.log('Targeted switch failed, trying fallback approach:', streamError.message);
+                
+                try {
+                    const fallbackVideoDevice = type === 'video' ? deviceId : this.currentDevices.video;
+                    const fallbackAudioDevice = type === 'audio' ? deviceId : this.currentDevices.audio;
+                    
+                    await this.fallbackCompleteStreamRestart(fallbackVideoDevice, fallbackAudioDevice);
+                    
+                    console.log('Fallback device switch successful');
+                    this.updateStatus(`🔄 Switched ${type} device successfully (fallback method)`, 'connected');
+                    return; // Success via fallback
+                    
+                } catch (fallbackError) {
+                    console.error('Both targeted and fallback switch methods failed:', fallbackError);
+                    throw new Error(`Device switch failed: ${streamError.message}. Fallback also failed: ${fallbackError.message}`);
+                }
+            }
             
         } catch (error) {
             console.error(`Error switching ${type} device:`, error);
-            this.updateStatus(`❌ Failed to switch ${type} device`, 'disconnected');
+            
+            let errorMessage = `Failed to switch ${type} device`;
+            
+            // Provide specific error messages
+            if (error.name === 'NotAllowedError') {
+                errorMessage += ': Permission denied. Please allow camera/microphone access.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += ': Device not found or disconnected.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage += ': Device busy or in use by another application.';
+            } else if (error.name === 'OverconstrainedError') {
+                errorMessage += ': Device does not support required settings.';
+            } else if (error.name === 'AbortError') {
+                errorMessage += ': Device switch was aborted.';
+            } else if (error.message) {
+                errorMessage += `: ${error.message}`;
+            }
+            
+            this.updateStatus(`❌ ${errorMessage}`, 'error');
+            throw error; // Re-throw for remote switching error handling
         }
     }
 
@@ -609,34 +1024,162 @@ class CCTVCamera {
     }
 
     async handleRemoteDeviceSwitch(deviceType, deviceId, viewerId) {
+        console.log(`Remote device switch requested: ${deviceType} to ${deviceId} from viewer ${viewerId}`);
+        
+        let originalDeviceId = null;
+        let rollbackRequired = false;
+        
         try {
-            console.log(`Switching ${deviceType} to device:`, deviceId);
+            // Validate device type
+            if (deviceType !== 'video' && deviceType !== 'audio') {
+                throw new Error(`Invalid device type: ${deviceType}`);
+            }
             
-            // Update the device selectors in the UI
+            // Check if we have an active stream
+            if (!this.localStream) {
+                throw new Error('No active camera stream available for device switching');
+            }
+            
+            // Store original device ID for potential rollback
+            originalDeviceId = this.currentDevices[deviceType];
+            console.log(`Original ${deviceType} device: ${originalDeviceId}`);
+            
+            // Check if we're already using the requested device
+            if (originalDeviceId === deviceId) {
+                console.log(`Already using ${deviceType} device ${deviceId}, no switch needed`);
+                
+                // Send success response anyway
+                this.socket.emit('device-switched', {
+                    target: viewerId,
+                    deviceType: deviceType,
+                    deviceId: deviceId,
+                    success: true,
+                    deviceLabel: `Current ${deviceType} device`,
+                    message: `Already using the selected ${deviceType} device`
+                });
+                return;
+            }
+            
+            // Validate that the target device is available
+            await this.loadAvailableDevices(); // Refresh device list to ensure accuracy
+            
+            const availableDevices = deviceType === 'video' ? this.availableDevices.video : this.availableDevices.audio;
+            const targetDevice = availableDevices.find(device => device.deviceId === deviceId);
+            
+            if (!targetDevice) {
+                throw new Error(`${deviceType} device with ID ${deviceId} is not available. Please refresh the device list.`);
+            }
+            
+            console.log(`Target ${deviceType} device found: ${targetDevice.label}`);
+            
+            // Show switching status
+            this.updateStatus(`🔄 Switching ${deviceType} device remotely to ${targetDevice.label}...`, 'warning');
+            
+            // Update the device selectors in the UI to reflect the change
             const selector = document.getElementById(deviceType === 'video' ? 'videoDeviceSelect' : 'audioDeviceSelect');
             if (selector) {
                 selector.value = deviceId;
             }
             
-            // Switch the actual device
-            await this.switchDevice(deviceType, deviceId);
+            // Mark that we've started the switch (for potential rollback)
+            rollbackRequired = true;
             
-            // Confirm to viewer
+            // Add a small delay to prevent rapid switching conflicts
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Perform the actual device switch with retry logic
+            let switchAttempts = 0;
+            const maxAttempts = 3;
+            let lastError = null;
+            
+            while (switchAttempts < maxAttempts) {
+                try {
+                    console.log(`Attempting device switch (attempt ${switchAttempts + 1}/${maxAttempts})`);
+                    await this.switchDevice(deviceType, deviceId);
+                    break; // Success, exit retry loop
+                } catch (attemptError) {
+                    lastError = attemptError;
+                    switchAttempts++;
+                    
+                    if (switchAttempts < maxAttempts) {
+                        console.log(`Switch attempt ${switchAttempts} failed, retrying in 500ms:`, attemptError.message);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+            }
+            
+            // Check if all attempts failed
+            if (switchAttempts === maxAttempts) {
+                throw lastError || new Error(`Failed to switch ${deviceType} device after ${maxAttempts} attempts`);
+            }
+            
+            console.log(`Remote ${deviceType} device switch successful after ${switchAttempts + 1} attempt(s)`);
+            
+            // Send success confirmation to viewer
             this.socket.emit('device-switched', {
                 target: viewerId,
                 deviceType: deviceType,
                 deviceId: deviceId,
-                success: true
+                success: true,
+                deviceLabel: targetDevice.label,
+                message: `Successfully switched ${deviceType} to ${targetDevice.label}`
             });
             
         } catch (error) {
             console.error('Error in remote device switch:', error);
+            
+            // Attempt rollback if we started the switch process
+            if (rollbackRequired && originalDeviceId && originalDeviceId !== deviceId) {
+                console.log(`Attempting rollback to original ${deviceType} device: ${originalDeviceId}`);
+                try {
+                    await this.switchDevice(deviceType, originalDeviceId);
+                    
+                    // Update UI selector back to original
+                    const selector = document.getElementById(deviceType === 'video' ? 'videoDeviceSelect' : 'audioDeviceSelect');
+                    if (selector) {
+                        selector.value = originalDeviceId;
+                    }
+                    
+                    console.log(`Rollback successful for ${deviceType} device`);
+                    this.updateStatus(`⚠️ ${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} switch failed, reverted to original device`, 'warning');
+                } catch (rollbackError) {
+                    console.error(`Rollback failed for ${deviceType} device:`, rollbackError);
+                    this.updateStatus(`❌ ${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} switch failed and rollback failed`, 'error');
+                }
+            } else {
+                // Show error on camera device
+                this.updateStatus(`❌ Remote ${deviceType} switch failed: ${error.message}`, 'error');
+            }
+            
+            // Determine error category for better user guidance
+            let errorCategory = 'unknown';
+            let userFriendlyMessage = error.message;
+            
+            if (error.name === 'NotAllowedError' || error.message.includes('Permission')) {
+                errorCategory = 'permission';
+                userFriendlyMessage = 'Camera/microphone access was denied. Please check permissions.';
+            } else if (error.name === 'NotFoundError' || error.message.includes('not found')) {
+                errorCategory = 'device_missing';
+                userFriendlyMessage = 'The selected device is no longer available. Please refresh and try again.';
+            } else if (error.name === 'NotReadableError' || error.message.includes('busy')) {
+                errorCategory = 'device_busy';
+                userFriendlyMessage = 'The device is busy or being used by another application.';
+            } else if (error.name === 'OverconstrainedError') {
+                errorCategory = 'constraints';
+                userFriendlyMessage = 'The device does not support the required settings.';
+            }
+            
+            // Send detailed error information to viewer
             this.socket.emit('device-switched', {
                 target: viewerId,
                 deviceType: deviceType,
                 deviceId: deviceId,
                 success: false,
-                error: error.message
+                error: error.message,
+                errorCategory: errorCategory,
+                userFriendlyMessage: userFriendlyMessage,
+                rollbackAttempted: rollbackRequired,
+                message: `Failed to switch ${deviceType}: ${userFriendlyMessage}`
             });
         }
     }
@@ -655,10 +1198,52 @@ class CCTVCamera {
     updateStatus(message, type) {
         this.status.textContent = message;
         this.status.className = `status ${type}`;
+        
+        // Add mobile-specific help for camera issues
+        if (type === 'error' && message.includes('Camera access')) {
+            this.showMobileHelp();
+        }
+    }
+
+    showMobileHelp() {
+        // Create a help message for mobile users
+        const helpDiv = document.createElement('div');
+        helpDiv.className = 'mobile-help';
+        helpDiv.innerHTML = `
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; border-radius: 5px; font-size: 14px;">
+                <h4 style="margin: 0 0 10px 0; color: #856404;">📱 Mobile Camera Setup Help</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #856404;">
+                    <li><strong>HTTPS Required:</strong> Camera access requires a secure connection (https://)</li>
+                    <li><strong>Permissions:</strong> Allow camera access when prompted by your browser</li>
+                    <li><strong>Chrome Mobile:</strong> Make sure you're using the latest version</li>
+                    <li><strong>Alternative:</strong> Try accessing from a desktop browser if mobile doesn't work</li>
+                </ul>
+                <p style="margin: 10px 0 0 0; color: #856404;">
+                    <small>💡 Tip: If using a local network, access via HTTPS or use 
+                    <code style="background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
+                    </small>
+                </p>
+            </div>
+        `;
+        
+        // Insert help after status element
+        if (!document.querySelector('.mobile-help')) {
+            this.status.parentNode.insertBefore(helpDiv, this.status.nextSibling);
+        }
     }
 }
 
 // Initialize the camera when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new CCTVCamera();
+    try {
+        new CCTVCamera();
+    } catch (error) {
+        console.error('Failed to initialize CCTV Camera:', error);
+        // Show fallback error message
+        const statusElement = document.getElementById('status');
+        if (statusElement) {
+            statusElement.textContent = '❌ Failed to initialize camera system. Please refresh the page.';
+            statusElement.className = 'status error';
+        }
+    }
 });
