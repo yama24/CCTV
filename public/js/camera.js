@@ -763,20 +763,40 @@ class CCTVCamera {
             }
             
             // Build new constraints with target devices
-            const constraints = {
-                video: targetVideoDevice ? {
-                    deviceId: { ideal: targetVideoDevice },
-                    width: { ideal: 640, max: 1280 },
-                    height: { ideal: 480, max: 720 },
-                    frameRate: { ideal: 30, max: 30 }
-                } : true,
-                audio: targetAudioDevice ? {
+            const constraints = {};
+            
+            if (targetVideoDevice) {
+                if (this.deviceInfo && this.deviceInfo.isMobile) {
+                    // Mobile constraints (keep existing behavior)
+                    constraints.video = {
+                        deviceId: { ideal: targetVideoDevice },
+                        width: { ideal: 640, max: 1280 },
+                        height: { ideal: 480, max: 720 },
+                        frameRate: { ideal: 30, max: 30 }
+                    };
+                } else {
+                    // PC constraints for better quality
+                    constraints.video = {
+                        deviceId: { ideal: targetVideoDevice },
+                        width: { ideal: 1280, max: 1920 },
+                        height: { ideal: 720, max: 1080 },
+                        frameRate: { ideal: 30, max: 60 }
+                    };
+                }
+            } else {
+                constraints.video = true;
+            }
+            
+            if (targetAudioDevice) {
+                constraints.audio = {
                     deviceId: { ideal: targetAudioDevice },
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
-                } : true
-            };
+                };
+            } else {
+                constraints.audio = true;
+            }
             
             console.log('Fallback constraints:', constraints);
             
@@ -831,6 +851,162 @@ class CCTVCamera {
         }
     }
 
+    async pcProgressiveFallback(type, deviceId) {
+        console.log(`PC progressive fallback for ${type} device: ${deviceId}`);
+        
+        // Progressive constraint attempts for PC devices only
+        const constraintAttempts = [];
+        
+        if (type === 'video') {
+            constraintAttempts.push(
+                // Attempt 1: High quality
+                { video: { deviceId: { exact: deviceId }, width: 1920, height: 1080 } },
+                // Attempt 2: Medium quality
+                { video: { deviceId: { exact: deviceId }, width: 1280, height: 720 } },
+                // Attempt 3: Low quality
+                { video: { deviceId: { exact: deviceId }, width: 640, height: 480 } },
+                // Attempt 4: Just deviceId
+                { video: { deviceId: { exact: deviceId } } },
+                // Attempt 5: Ideal instead of exact
+                { video: { deviceId: { ideal: deviceId } } }
+            );
+        } else {
+            constraintAttempts.push(
+                // Attempt 1: Full audio features
+                { audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+                // Attempt 2: Just deviceId exact
+                { audio: { deviceId: { exact: deviceId } } },
+                // Attempt 3: Ideal instead of exact
+                { audio: { deviceId: { ideal: deviceId } } }
+            );
+        }
+        
+        let lastError = null;
+        
+        for (let i = 0; i < constraintAttempts.length; i++) {
+            try {
+                console.log(`PC fallback attempt ${i + 1}:`, constraintAttempts[i]);
+                
+                const tempStream = await navigator.mediaDevices.getUserMedia(constraintAttempts[i]);
+                const newTrack = tempStream.getTracks().find(track => track.kind === (type === 'video' ? 'video' : 'audio'));
+                
+                if (!newTrack) {
+                    throw new Error(`No ${type} track in stream`);
+                }
+                
+                console.log(`PC fallback attempt ${i + 1} successful`);
+                
+                // Replace tracks in peer connections
+                const replacePromises = [];
+                this.peerConnections.forEach((peerConnection, viewerId) => {
+                    const senders = peerConnection.getSenders();
+                    const sender = senders.find(s => s.track && s.track.kind === newTrack.kind);
+                    
+                    if (sender) {
+                        replacePromises.push(sender.replaceTrack(newTrack));
+                    }
+                });
+                
+                await Promise.all(replacePromises);
+                
+                // Update local stream
+                const oldTracks = this.localStream.getTracks();
+                const oldTrack = oldTracks.find(track => track.kind === newTrack.kind);
+                
+                if (oldTrack) {
+                    oldTrack.stop();
+                    this.localStream.removeTrack(oldTrack);
+                }
+                
+                this.localStream.addTrack(newTrack);
+                this.localVideo.srcObject = this.localStream;
+                this.showVideo();
+                
+                // Update device tracking
+                this.currentDevices[type] = deviceId;
+                
+                // Clean up temp stream
+                tempStream.getTracks().forEach(track => {
+                    if (track !== newTrack) {
+                        track.stop();
+                    }
+                });
+                
+                console.log(`PC progressive fallback completed successfully on attempt ${i + 1}`);
+                return; // Success
+                
+            } catch (error) {
+                console.log(`PC fallback attempt ${i + 1} failed:`, error.message);
+                lastError = error;
+            }
+        }
+        
+        throw lastError || new Error('All PC fallback attempts failed');
+    }
+
+    async pcCameraSwitchFallback(deviceId) {
+        console.log(`PC camera fallback for device: ${deviceId}`);
+        
+        const attempts = [
+            // Attempt 1: Exact deviceId with basic constraints
+            {
+                video: {
+                    deviceId: { exact: deviceId },
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            },
+            // Attempt 2: Exact deviceId only
+            {
+                video: { deviceId: { exact: deviceId } }
+            },
+            // Attempt 3: Ideal deviceId with constraints
+            {
+                video: {
+                    deviceId: { ideal: deviceId },
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            },
+            // Attempt 4: Ideal deviceId only
+            {
+                video: { deviceId: { ideal: deviceId } }
+            },
+            // Attempt 5: Just video true (will use default camera)
+            {
+                video: true
+            }
+        ];
+        
+        for (let i = 0; i < attempts.length; i++) {
+            try {
+                console.log(`PC fallback attempt ${i + 1}:`, attempts[i]);
+                const stream = await navigator.mediaDevices.getUserMedia(attempts[i]);
+                
+                // Verify we got the right device (if possible)
+                const videoTrack = stream.getVideoTracks()[0];
+                if (videoTrack) {
+                    const settings = videoTrack.getSettings();
+                    console.log(`PC fallback attempt ${i + 1} success. Device: ${settings.deviceId}`);
+                    
+                    // If this is the last attempt (default camera), warn user
+                    if (i === attempts.length - 1) {
+                        console.warn('Using default camera as fallback - requested device may not be available');
+                    }
+                }
+                
+                return stream;
+            } catch (error) {
+                console.log(`PC fallback attempt ${i + 1} failed:`, error.message);
+                
+                // If this is the last attempt, throw the error
+                if (i === attempts.length - 1) {
+                    throw new Error(`All PC camera fallback attempts failed. Last error: ${error.message}`);
+                }
+            }
+        }
+    }
+
     async switchDevice(type, deviceId) {
         if (!this.localStream) {
             throw new Error('No active camera stream to switch');
@@ -853,20 +1029,32 @@ class CCTVCamera {
             // This reduces camera access conflicts on mobile devices
             let newTrack = null;
             let tempStream = null;
-            
             try {
                 // Build constraints only for the device type we're switching
                 const constraints = {};
                 
                 if (type === 'video') {
-                    constraints.video = {
-                        deviceId: { ideal: deviceId },
-                        width: { ideal: 640, max: 1280 },
-                        height: { ideal: 480, max: 720 },
-                        frameRate: { ideal: 30, max: 30 }
-                    };
+                    // Use different constraints for PC vs mobile devices
+                    if (this.deviceInfo && this.deviceInfo.isMobile) {
+                        // Mobile-optimized constraints (keep existing behavior)
+                        constraints.video = {
+                            deviceId: { ideal: deviceId },
+                            width: { ideal: 640, max: 1280 },
+                            height: { ideal: 480, max: 720 },
+                            frameRate: { ideal: 30, max: 30 }
+                        };
+                    } else {
+                        // PC-optimized constraints for better compatibility
+                        constraints.video = {
+                            deviceId: { ideal: deviceId },
+                            width: { ideal: 1280, max: 1920 },
+                            height: { ideal: 720, max: 1080 },
+                            frameRate: { ideal: 30, max: 60 }
+                        };
+                    }
                     // Don't request audio - we'll keep the existing audio track
                 } else {
+                    // Audio constraints (same for all devices)
                     constraints.audio = {
                         deviceId: { ideal: deviceId },
                         echoCancellation: true,
@@ -879,7 +1067,14 @@ class CCTVCamera {
                 console.log('Targeted device switch constraints:', constraints);
                 
                 // Get stream with only the track we need to switch
-                tempStream = await this.getUserMediaSafely(constraints);
+                if (type === 'video' && this.deviceInfo && !this.deviceInfo.isMobile) {
+                    // For PC video devices, try our fallback approach first
+                    console.log('Using PC camera fallback approach');
+                    tempStream = await this.pcCameraSwitchFallback(deviceId);
+                } else {
+                    // For mobile devices or audio, use the standard approach
+                    tempStream = await this.getUserMediaSafely(constraints);
+                }
                 
                 // Get the new track of the type we're switching
                 const newTracks = tempStream.getTracks();
@@ -975,7 +1170,21 @@ class CCTVCamera {
                     
                 } catch (fallbackError) {
                     console.error('Both targeted and fallback switch methods failed:', fallbackError);
-                    throw new Error(`Device switch failed: ${streamError.message}. Fallback also failed: ${fallbackError.message}`);
+                    
+                    // For PC devices only, try one more progressive fallback approach
+                    if (this.deviceInfo && !this.deviceInfo.isMobile) {
+                        console.log('Attempting PC-specific progressive fallback...');
+                        try {
+                            await this.pcProgressiveFallback(type, deviceId);
+                            console.log('PC progressive fallback successful');
+                            this.updateStatus(`🔄 Switched ${type} device successfully (PC fallback)`, 'connected');
+                            return; // Success via PC fallback
+                        } catch (pcFallbackError) {
+                            console.error('PC progressive fallback also failed:', pcFallbackError);
+                        }
+                    }
+                    
+                    throw new Error(`Device switch failed: ${streamError.message}. All fallback methods failed.`);
                 }
             }
             
