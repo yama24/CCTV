@@ -615,9 +615,23 @@ class CCTVCamera {
 
             const peerConnection = new RTCPeerConnection({
                 iceServers: [
+                    // Google STUN servers
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    
+                    // Additional STUN servers for better reliability
+                    { urls: 'stun:stun.services.mozilla.com' },
+                    { urls: 'stun:stun.stunprotocol.org:3478' },
+                    
+                    // Free TURN servers (may have limited bandwidth)
+                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                ],
+                iceCandidatePoolSize: 10
             });
 
             this.peerConnections.set(viewerId, peerConnection);
@@ -2822,9 +2836,23 @@ class CCTVCamera {
             // Create peer connection for receiving audio
             const speakPeerConnection = new RTCPeerConnection({
                 iceServers: [
+                    // Google STUN servers
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    
+                    // Additional STUN servers for better reliability
+                    { urls: 'stun:stun.services.mozilla.com' },
+                    { urls: 'stun:stun.stunprotocol.org:3478' },
+                    
+                    // Free TURN servers (may have limited bandwidth)
+                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                ],
+                iceCandidatePoolSize: 10
             });
 
             this.speakPeerConnections.set(viewerId, speakPeerConnection);

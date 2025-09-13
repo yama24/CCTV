@@ -38,14 +38,14 @@ app.use((req, res, next) => {
     express.static('public')(req, res, next);
 });
 
-// Session configuration - auto-detect HTTPS when behind proxy
+// Session configuration - ngrok and proxy friendly
 app.use(session({
     secret: 'your-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: 'auto',  // Automatically detect HTTPS
-        maxAge: 24 * 60 * 60 * 1000 * 100, // 24 hours * 100
+        secure: false,  // Set to false for ngrok compatibility (ngrok handles HTTPS termination)
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
         sameSite: 'lax'
     }
@@ -321,15 +321,42 @@ app.post('/api/auth/validate', (req, res) => {
     const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
     
     if (!token) {
-        return res.status(401).json({ valid: false, error: 'No token provided' });
+        return res.status(401).json({ error: 'No token provided' });
     }
     
     const decoded = verifyToken(token);
-    if (decoded) {
-        res.json({ valid: true, user: decoded });
-    } else {
-        res.status(401).json({ valid: false, error: 'Invalid or expired token' });
+    if (!decoded) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
     }
+    
+    res.json({ 
+        valid: true, 
+        user: {
+            username: decoded.username,
+            userId: decoded.userId,
+            role: decoded.role
+        }
+    });
+});
+
+// Diagnostic endpoint for connectivity testing
+app.get('/api/test-connection', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        server: 'CCTV Server',
+        clientIP: req.ip || req.connection.remoteAddress,
+        headers: {
+            userAgent: req.get('User-Agent'),
+            forwarded: req.get('X-Forwarded-For'),
+            realIP: req.get('X-Real-IP')
+        }
+    });
+});
+
+// Diagnostic page route
+app.get('/diagnostic', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'diagnostic.html'));
 });
 
 // API endpoint to get active cameras
