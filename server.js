@@ -745,6 +745,78 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Handle background mode notifications
+    socket.on('camera-background-mode', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            socket.emit('error', { message: 'Authentication required' });
+            return;
+        }
+        
+        if (socket.role === 'camera' && socket.roomId) {
+            const { roomId, backgroundMode } = data;
+            
+            // Update camera status
+            const cameraInfo = cameras.get(roomId);
+            if (cameraInfo && cameraInfo.userId === socket.user.userId) {
+                cameraInfo.backgroundMode = backgroundMode;
+                cameraInfo.lastActivity = new Date();
+                
+                console.log(`Camera ${roomId} ${backgroundMode ? 'entered' : 'exited'} background mode`);
+                
+                // Notify viewers about background mode status
+                const room = rooms.get(roomId);
+                if (room) {
+                    room.viewers.forEach(viewerId => {
+                        io.to(viewerId).emit('camera-background-status', {
+                            roomId,
+                            backgroundMode,
+                            message: backgroundMode ? 'Camera running in background' : 'Camera back to normal mode'
+                        });
+                    });
+                }
+            }
+        }
+    });
+
+    // Handle keep-alive signals from cameras in background mode
+    socket.on('camera-keep-alive', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            return; // Silent fail for keep-alive
+        }
+        
+        if (socket.role === 'camera' && socket.roomId) {
+            const { roomId, timestamp, streamActive, backgroundMode } = data;
+            
+            // Update camera activity
+            const cameraInfo = cameras.get(roomId);
+            if (cameraInfo && cameraInfo.userId === socket.user.userId) {
+                cameraInfo.lastKeepAlive = new Date(timestamp);
+                cameraInfo.streamActive = streamActive;
+                cameraInfo.backgroundMode = backgroundMode;
+                
+                console.log(`📡 Keep-alive from camera ${roomId} (background: ${backgroundMode})`);
+                
+                // Optionally notify viewers that camera is still active
+                const room = rooms.get(roomId);
+                if (room && backgroundMode) {
+                    room.viewers.forEach(viewerId => {
+                        io.to(viewerId).emit('camera-keep-alive-status', {
+                            roomId,
+                            timestamp,
+                            streamActive
+                        });
+                    });
+                }
+            }
+        }
+    });
+
+    // Handle ping for background mode keep-alive
+    socket.on('ping', (data) => {
+        // Simple ping/pong to keep connection alive
+        socket.emit('pong', { timestamp: data.timestamp, serverTime: Date.now() });
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);

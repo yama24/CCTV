@@ -22,6 +22,15 @@ class CCTVCamera {
             audio: null
         };
         
+        // Enhanced background streaming support
+        this.isBackgroundMode = false;
+        this.backgroundKeepAlive = null;
+        this.lastActivityTime = Date.now();
+        this.wakeLock = null;
+        this.backgroundCanvas = null;
+        this.backgroundInterval = null;
+        this.streamMonitorInterval = null;
+        
         this.initializeEventListeners();
         this.initializeDefaults();
         this.detectBrowserAndDevice();
@@ -30,6 +39,9 @@ class CCTVCamera {
         
         // Listen for device changes
         this.setupDeviceChangeListeners();
+        
+        // Setup background streaming support
+        this.setupBackgroundStreaming();
         
         // Initialize authentication and socket connection
         this.initializeAuthentication();
@@ -384,6 +396,10 @@ class CCTVCamera {
     }
 
     stopCamera() {
+        // Clean up background streaming resources
+        this.stopBackgroundKeepAlive();
+        this.disableBackgroundMode();
+        
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
@@ -750,6 +766,710 @@ class CCTVCamera {
                     this.loadAvailableDevices();
                 }, 1000); // Wait a bit for devices to settle
             });
+        }
+    }
+
+    setupBackgroundStreaming() {
+        // Listen for page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            this.handleVisibilityChange();
+        });
+        
+        // Listen for page focus/blur events (additional fallback)
+        window.addEventListener('focus', () => {
+            this.handlePageFocus();
+        });
+        
+        window.addEventListener('blur', () => {
+            this.handlePageBlur();
+        });
+        
+        // Listen for beforeunload to try to keep streaming
+        window.addEventListener('beforeunload', (event) => {
+            if (this.localStream && this.peerConnections.size > 0) {
+                // Try to prevent page unload when streaming
+                event.preventDefault();
+                event.returnValue = 'Camera is currently streaming. Are you sure you want to leave?';
+                return event.returnValue;
+            }
+        });
+        
+        // Mobile-specific events
+        if (this.deviceInfo && this.deviceInfo.isMobile) {
+            // Listen for app state changes on mobile
+            document.addEventListener('resume', () => {
+                console.log('App resumed, checking camera stream...');
+                this.handleAppResume();
+            });
+            
+            document.addEventListener('pause', () => {
+                console.log('App paused, enabling background mode...');
+                this.handleAppPause();
+            });
+        }
+        
+        console.log('Background streaming support initialized');
+    }
+
+    handleVisibilityChange() {
+        if (document.hidden) {
+            console.log('Page hidden, enabling background streaming mode...');
+            this.enableBackgroundMode();
+        } else {
+            console.log('Page visible, disabling background mode...');
+            this.disableBackgroundMode();
+        }
+    }
+
+    handlePageFocus() {
+        console.log('Page focused');
+        this.lastActivityTime = Date.now();
+        this.disableBackgroundMode();
+    }
+
+    handlePageBlur() {
+        console.log('Page blurred');
+        if (this.localStream) {
+            this.enableBackgroundMode();
+        }
+    }
+
+    handleAppResume() {
+        console.log('Mobile app resumed');
+        this.lastActivityTime = Date.now();
+        this.disableBackgroundMode();
+        
+        // Check if camera stream is still active
+        if (this.localStream) {
+            this.verifyStreamHealth();
+        }
+    }
+
+    handleAppPause() {
+        console.log('Mobile app paused');
+        if (this.localStream) {
+            this.enableBackgroundMode();
+        }
+    }
+
+    enableBackgroundMode() {
+        if (this.isBackgroundMode || !this.localStream) {
+            return;
+        }
+        
+        console.log('🔄 Enabling enhanced background streaming mode...');
+        this.isBackgroundMode = true;
+        
+        // Update status to show background mode
+        this.updateStatus('📱 Running in background - Camera active', 'connected');
+        
+        // Set up keep-alive mechanism
+        this.startBackgroundKeepAlive();
+        
+        // Enhanced mobile browser support
+        if (this.deviceInfo && this.deviceInfo.isMobile) {
+            this.enableAggressiveBackgroundMode();
+            // Create video keepalive system specifically for mobile
+            this.createVideoKeepaliveCanvas();
+        }
+        
+        // Reduce video element updates to save resources
+        if (this.localVideo) {
+            this.localVideo.style.opacity = '0.3';
+            // Keep video playing to prevent stream suspension
+            this.localVideo.muted = true;
+            this.localVideo.play().catch(e => console.log('Video play failed:', e));
+        }
+        
+        // Start stream monitoring
+        this.startStreamMonitoring();
+        
+        // Notify viewers about background mode
+        if (this.socket) {
+            this.socket.emit('camera-background-mode', {
+                roomId: this.roomId,
+                backgroundMode: true
+            });
+        }
+    }
+
+    disableBackgroundMode() {
+        if (!this.isBackgroundMode) {
+            return;
+        }
+        
+        console.log('🔄 Disabling background mode, returning to normal operation...');
+        this.isBackgroundMode = false;
+        
+        // Stop keep-alive
+        this.stopBackgroundKeepAlive();
+        
+        // Clean up aggressive background mode resources
+        this.cleanupBackgroundMode();
+        
+        // Restore video element
+        if (this.localVideo) {
+            this.localVideo.style.opacity = '1';
+            this.localVideo.muted = false;
+        }
+        
+        // Update status
+        if (this.localStream) {
+            this.updateStatus('📺 Camera active - Normal mode', 'connected');
+        }
+        
+        // Notify viewers about normal mode
+        if (this.socket) {
+            this.socket.emit('camera-background-mode', {
+                roomId: this.roomId,
+                backgroundMode: false
+            });
+        }
+    }
+
+    cleanupBackgroundMode() {
+        // Release wake lock
+        if (this.wakeLock) {
+            this.wakeLock.release().catch(e => console.log('Wake lock release failed:', e));
+            this.wakeLock = null;
+        }
+        
+        // Clean up background canvas
+        if (this.backgroundCanvas) {
+            if (this.backgroundCanvas.parentNode) {
+                this.backgroundCanvas.parentNode.removeChild(this.backgroundCanvas);
+            }
+            this.backgroundCanvas = null;
+        }
+        
+        // Clean up video keepalive elements
+        if (this.keepaliveVideo) {
+            if (this.keepaliveVideo.parentNode) {
+                this.keepaliveVideo.parentNode.removeChild(this.keepaliveVideo);
+            }
+            this.keepaliveVideo = null;
+        }
+        
+        if (this.videoCanvas) {
+            if (this.videoCanvas.parentNode) {
+                this.videoCanvas.parentNode.removeChild(this.videoCanvas);
+            }
+            this.videoCanvas = null;
+        }
+        
+        // Clear background intervals
+        if (this.backgroundInterval) {
+            clearInterval(this.backgroundInterval);
+            this.backgroundInterval = null;
+        }
+        
+        if (this.streamTouchInterval) {
+            clearInterval(this.streamTouchInterval);
+            this.streamTouchInterval = null;
+        }
+        
+        if (this.streamMonitorInterval) {
+            clearInterval(this.streamMonitorInterval);
+            this.streamMonitorInterval = null;
+        }
+        
+        if (this.connectionMaintenanceInterval) {
+            clearInterval(this.connectionMaintenanceInterval);
+            this.connectionMaintenanceInterval = null;
+        }
+        
+        if (this.suspensionIntervals) {
+            this.suspensionIntervals.forEach(interval => clearInterval(interval));
+            this.suspensionIntervals = null;
+        }
+        
+        console.log('📱 Background mode cleanup completed');
+    }
+
+    startBackgroundKeepAlive() {
+        if (this.backgroundKeepAlive) {
+            return; // Already running
+        }
+        
+        console.log('Starting background keep-alive mechanism...');
+        
+        // Send periodic signals to keep the connection alive
+        this.backgroundKeepAlive = setInterval(() => {
+            if (this.socket && this.localStream) {
+                // Send keep-alive signal
+                this.socket.emit('camera-keep-alive', {
+                    roomId: this.roomId,
+                    timestamp: Date.now(),
+                    streamActive: true,
+                    backgroundMode: this.isBackgroundMode
+                });
+                
+                // Verify stream health
+                this.verifyStreamHealth();
+                
+                console.log('📡 Background keep-alive signal sent');
+            }
+        }, 5000); // Every 5 seconds
+        
+        // Also try to prevent mobile browser from sleeping
+        if (this.deviceInfo && this.deviceInfo.isMobile) {
+            this.preventMobileSleep();
+        }
+    }
+
+    stopBackgroundKeepAlive() {
+        if (this.backgroundKeepAlive) {
+            console.log('Stopping background keep-alive mechanism...');
+            clearInterval(this.backgroundKeepAlive);
+            this.backgroundKeepAlive = null;
+        }
+    }
+
+    verifyStreamHealth() {
+        if (!this.localStream) {
+            return;
+        }
+        
+        const videoTracks = this.localStream.getVideoTracks();
+        const audioTracks = this.localStream.getAudioTracks();
+        
+        let streamHealthy = true;
+        
+        // Check video tracks
+        videoTracks.forEach(track => {
+            if (track.readyState !== 'live') {
+                console.warn('Video track not live:', track.readyState);
+                streamHealthy = false;
+            }
+        });
+        
+        // Check audio tracks
+        audioTracks.forEach(track => {
+            if (track.readyState !== 'live') {
+                console.warn('Audio track not live:', track.readyState);
+                streamHealthy = false;
+            }
+        });
+        
+        if (!streamHealthy) {
+            console.error('Stream health check failed, attempting recovery...');
+            this.attemptStreamRecovery();
+        } else {
+            console.log('✅ Stream health check passed');
+        }
+    }
+
+    async attemptStreamRecovery() {
+        if (!this.currentDevices.video) {
+            console.error('Cannot recover stream: no current video device');
+            return;
+        }
+        
+        try {
+            console.log('🔄 Attempting stream recovery in background...');
+            
+            // Try to restart the stream with current devices
+            const constraints = {
+                video: {
+                    deviceId: { ideal: this.currentDevices.video },
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: this.currentDevices.audio ? {
+                    deviceId: { ideal: this.currentDevices.audio }
+                } : true
+            };
+            
+            const newStream = await this.getUserMediaSafely(constraints);
+            
+            // Replace the stream
+            const oldStream = this.localStream;
+            this.localStream = newStream;
+            
+            // Update video element
+            this.localVideo.srcObject = newStream;
+            
+            // Update peer connections
+            this.peerConnections.forEach(async (peerConnection, viewerId) => {
+                const senders = peerConnection.getSenders();
+                const newTracks = newStream.getTracks();
+                
+                for (const newTrack of newTracks) {
+                    const sender = senders.find(s => s.track && s.track.kind === newTrack.kind);
+                    if (sender) {
+                        await sender.replaceTrack(newTrack);
+                    }
+                }
+            });
+            
+            // Stop old stream
+            if (oldStream) {
+                oldStream.getTracks().forEach(track => track.stop());
+            }
+            
+            console.log('✅ Stream recovery successful');
+            this.updateStatus('🔄 Stream recovered in background', 'connected');
+            
+        } catch (error) {
+            console.error('❌ Stream recovery failed:', error);
+            this.updateStatus('❌ Background stream recovery failed', 'error');
+        }
+    }
+
+    enableAggressiveBackgroundMode() {
+        console.log('🚀 Enabling aggressive background mode for mobile...');
+        
+        // Method 1: Enhanced Wake Lock
+        this.requestWakeLock();
+        
+        // Method 2: Create background canvas to keep GPU active
+        this.createBackgroundCanvas();
+        
+        // Method 3: Continuous stream touching
+        this.startStreamTouching();
+        
+        // Method 4: Prevent page suspension with intervals
+        this.preventPageSuspension();
+        
+        // Method 5: Keep WebRTC connections active
+        this.maintainWebRTCConnections();
+    }
+
+    async requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                console.log('📱 Screen wake lock acquired');
+                
+                this.wakeLock.addEventListener('release', () => {
+                    console.log('📱 Screen wake lock released, attempting to reacquire...');
+                    // Try to reacquire wake lock
+                    setTimeout(() => this.requestWakeLock(), 1000);
+                });
+            }
+        } catch (error) {
+            console.log('Wake lock failed:', error);
+            // Fallback to old method
+            this.preventMobileSleep();
+        }
+    }
+
+    createBackgroundCanvas() {
+        try {
+            // Create a canvas that continuously draws to keep GPU active
+            this.backgroundCanvas = document.createElement('canvas');
+            this.backgroundCanvas.width = 1;
+            this.backgroundCanvas.height = 1;
+            this.backgroundCanvas.style.position = 'fixed';
+            this.backgroundCanvas.style.top = '-9999px';
+            this.backgroundCanvas.style.opacity = '0';
+            
+            const ctx = this.backgroundCanvas.getContext('2d');
+            document.body.appendChild(this.backgroundCanvas);
+            
+            // Continuously draw to keep canvas active
+            let frame = 0;
+            this.backgroundInterval = setInterval(() => {
+                ctx.fillStyle = frame % 2 === 0 ? '#000' : '#fff';
+                ctx.fillRect(0, 0, 1, 1);
+                frame++;
+            }, 100);
+            
+            // Additional video-specific canvas for stream rendering
+            if (this.deviceInfo?.isMobile && this.localStream) {
+                this.createVideoKeepaliveCanvas();
+            }
+            
+            console.log('📱 Background canvas created for GPU keep-alive');
+        } catch (error) {
+            console.log('Background canvas creation failed:', error);
+        }
+    }
+
+    createVideoKeepaliveCanvas() {
+        try {
+            // Create a hidden video element that continuously processes the stream
+            this.keepaliveVideo = document.createElement('video');
+            this.keepaliveVideo.style.position = 'fixed';
+            this.keepaliveVideo.style.top = '-9999px';
+            this.keepaliveVideo.style.left = '-9999px';
+            this.keepaliveVideo.style.width = '1px';
+            this.keepaliveVideo.style.height = '1px';
+            this.keepaliveVideo.style.opacity = '0';
+            this.keepaliveVideo.muted = true;
+            this.keepaliveVideo.autoplay = true;
+            this.keepaliveVideo.playsInline = true;
+            
+            // Create canvas to continuously render video frames
+            this.videoCanvas = document.createElement('canvas');
+            this.videoCanvas.width = 64;
+            this.videoCanvas.height = 48;
+            this.videoCanvas.style.position = 'fixed';
+            this.videoCanvas.style.top = '-9999px';
+            this.videoCanvas.style.left = '-9999px';
+            this.videoCanvas.style.opacity = '0';
+            
+            const videoCtx = this.videoCanvas.getContext('2d');
+            document.body.appendChild(this.keepaliveVideo);
+            document.body.appendChild(this.videoCanvas);
+            
+            // Set the stream to keepalive video
+            this.keepaliveVideo.srcObject = this.localStream;
+            
+            // Continuously render video frames to canvas
+            const renderFrame = () => {
+                if (this.keepaliveVideo && !this.keepaliveVideo.paused && !this.keepaliveVideo.ended) {
+                    try {
+                        videoCtx.drawImage(this.keepaliveVideo, 0, 0, 64, 48);
+                    } catch (e) {
+                        // Ignore canvas drawing errors
+                    }
+                }
+                
+                if (this.isBackgroundMode) {
+                    requestAnimationFrame(renderFrame);
+                }
+            };
+            
+            this.keepaliveVideo.addEventListener('loadeddata', () => {
+                console.log('📱 Video keepalive canvas started rendering');
+                renderFrame();
+            });
+            
+            console.log('📱 Video keepalive system created');
+        } catch (error) {
+            console.log('Video keepalive creation failed:', error);
+        }
+    }
+
+    startStreamTouching() {
+        // Continuously access stream properties to prevent suspension
+        const touchStream = () => {
+            if (this.localStream) {
+                try {
+                    // Touch video tracks with enhanced video continuity
+                    const videoTracks = this.localStream.getVideoTracks();
+                    videoTracks.forEach(track => {
+                        // Access properties to keep track active
+                        const settings = track.getSettings();
+                        const constraints = track.getConstraints();
+                        const capabilities = track.getCapabilities();
+                        
+                        // Enhanced video track maintenance for mobile Chrome
+                        if (this.isBackgroundMode && this.deviceInfo?.isMobile) {
+                            // Force video track to stay active by accessing frame data
+                            try {
+                                // Temporarily enable then disable track to force refresh
+                                if (track.enabled) {
+                                    track.enabled = false;
+                                    setTimeout(() => {
+                                        track.enabled = true;
+                                    }, 10);
+                                }
+                            } catch (e) {
+                                console.log('Video track refresh failed:', e);
+                            }
+                        }
+                        
+                        // Force track activity check
+                        if (track.readyState !== 'live') {
+                            console.warn('Video track not live, attempting recovery...');
+                            this.attemptStreamRecovery();
+                        }
+                    });
+                    
+                    // Touch audio tracks
+                    const audioTracks = this.localStream.getAudioTracks();
+                    audioTracks.forEach(track => {
+                        const settings = track.getSettings();
+                        if (track.readyState !== 'live') {
+                            console.warn('Audio track not live, attempting recovery...');
+                            this.attemptStreamRecovery();
+                        }
+                    });
+                } catch (error) {
+                    console.log('Stream touching failed:', error);
+                }
+            }
+        };
+        
+        // Touch stream every second
+        this.streamTouchInterval = setInterval(touchStream, 1000);
+        console.log('📱 Stream touching started');
+    }
+
+    preventPageSuspension() {
+        // Create multiple intervals to prevent page suspension
+        const intervals = [];
+        
+        // Interval 1: Keep JavaScript engine active
+        intervals.push(setInterval(() => {
+            const now = Date.now();
+            this.lastActivityTime = now;
+        }, 500));
+        
+        // Interval 2: Touch DOM to keep rendering engine active
+        intervals.push(setInterval(() => {
+            if (document.body) {
+                document.body.style.transform = 'translateZ(0)';
+                setTimeout(() => {
+                    document.body.style.transform = '';
+                }, 10);
+            }
+        }, 2000));
+        
+        // Interval 3: Keep network active with tiny requests
+        intervals.push(setInterval(() => {
+            if (this.socket && this.socket.connected) {
+                this.socket.emit('ping', { timestamp: Date.now() });
+            }
+        }, 3000));
+        
+        // Interval 4: Force video track activity (mobile-specific)
+        if (this.deviceInfo?.isMobile) {
+            intervals.push(setInterval(() => {
+                if (this.localStream && this.isBackgroundMode) {
+                    const videoTracks = this.localStream.getVideoTracks();
+                    videoTracks.forEach(track => {
+                        try {
+                            // Force track constraints refresh
+                            const currentSettings = track.getSettings();
+                            track.applyConstraints({
+                                width: currentSettings.width,
+                                height: currentSettings.height,
+                                frameRate: currentSettings.frameRate
+                            }).catch(e => {
+                                // Ignore constraint errors, just trying to keep track active
+                            });
+                        } catch (e) {
+                            // Ignore errors
+                        }
+                    });
+                }
+            }, 5000));
+        }
+        
+        this.suspensionIntervals = intervals;
+        console.log('📱 Page suspension prevention started');
+    }
+
+    maintainWebRTCConnections() {
+        // Continuously check and maintain peer connections
+        const maintainConnections = () => {
+            this.peerConnections.forEach((pc, viewerId) => {
+                try {
+                    // Check connection state
+                    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                        console.log(`Peer connection ${viewerId} failed, attempting recovery...`);
+                        // Don't immediately close, let automatic recovery handle it
+                    }
+                    
+                    // Generate stats to keep connection active
+                    pc.getStats().then(stats => {
+                        // Just accessing stats helps keep connection alive
+                    }).catch(e => {
+                        console.log('Stats access failed:', e);
+                    });
+                } catch (error) {
+                    console.log(`Error maintaining connection ${viewerId}:`, error);
+                }
+            });
+        };
+        
+        this.connectionMaintenanceInterval = setInterval(maintainConnections, 2000);
+        console.log('📱 WebRTC connection maintenance started');
+    }
+
+    startStreamMonitoring() {
+        // More aggressive stream monitoring for background mode
+        this.lastFrameTime = Date.now();
+        this.frameCount = 0;
+        
+        this.streamMonitorInterval = setInterval(() => {
+            this.verifyStreamHealth();
+            
+            // Additional checks for background mode
+            if (this.isBackgroundMode && this.localStream) {
+                const videoTracks = this.localStream.getVideoTracks();
+                const audioTracks = this.localStream.getAudioTracks();
+                
+                // Check if any tracks are muted or ended
+                let needsRecovery = false;
+                
+                videoTracks.forEach(track => {
+                    if (track.readyState === 'ended' || track.muted) {
+                        console.warn('Video track issue detected:', track.readyState, track.muted);
+                        needsRecovery = true;
+                    }
+                    
+                    // Check video track settings to detect freezing
+                    if (this.deviceInfo?.isMobile) {
+                        const settings = track.getSettings();
+                        if (settings.frameRate === 0) {
+                            console.warn('Video framerate dropped to 0');
+                            needsRecovery = true;
+                        }
+                    }
+                });
+                
+                audioTracks.forEach(track => {
+                    if (track.readyState === 'ended' || track.muted) {
+                        console.warn('Audio track issue detected:', track.readyState, track.muted);
+                        needsRecovery = true;
+                    }
+                });
+                
+                // Monitor video frame updates using the keepalive video
+                if (this.keepaliveVideo && this.deviceInfo?.isMobile) {
+                    const currentTime = this.keepaliveVideo.currentTime;
+                    if (this.lastVideoTime === currentTime && currentTime > 0) {
+                        this.videoStallCount = (this.videoStallCount || 0) + 1;
+                        if (this.videoStallCount > 3) {
+                            console.warn('Video stream appears frozen (no time updates)');
+                            needsRecovery = true;
+                            this.videoStallCount = 0;
+                        }
+                    } else {
+                        this.videoStallCount = 0;
+                    }
+                    this.lastVideoTime = currentTime;
+                }
+                
+                if (needsRecovery) {
+                    console.log('🔄 Background mode: Stream recovery needed');
+                    this.attemptStreamRecovery();
+                }
+            }
+        }, 2000); // Check every 2 seconds in background mode
+        
+        console.log('📱 Enhanced stream monitoring started');
+    }
+
+    preventMobileSleep() {
+        // Fallback method for older browsers
+        try {
+            const keepAliveVideo = document.createElement('video');
+            keepAliveVideo.style.position = 'fixed';
+            keepAliveVideo.style.top = '-9999px';
+            keepAliveVideo.style.left = '-9999px';
+            keepAliveVideo.style.width = '1px';
+            keepAliveVideo.style.height = '1px';
+            keepAliveVideo.style.opacity = '0';
+            keepAliveVideo.muted = true;
+            keepAliveVideo.loop = true;
+            keepAliveVideo.autoplay = true;
+            
+            // Create a minimal video blob to keep playing
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 1;
+            const stream = canvas.captureStream(1);
+            keepAliveVideo.srcObject = stream;
+            
+            document.body.appendChild(keepAliveVideo);
+            console.log('📱 Mobile sleep prevention video created');
+        } catch (error) {
+            console.log('Mobile sleep prevention setup failed:', error);
         }
     }
 

@@ -239,6 +239,24 @@ class CCTVViewer {
                 this.updateStatus(`❌ Failed to switch ${data.deviceType}: ${data.error}`, 'connected');
             }
         });
+
+        this.socket.on('camera-background-status', (data) => {
+            console.log('Camera background status:', data);
+            if (data.backgroundMode) {
+                this.updateStatus(`📱 ${data.message} - Stream continues`, 'warning');
+                this.showBackgroundModeIndicator(true);
+            } else {
+                this.updateStatus(`📺 ${data.message}`, 'connected');
+                this.showBackgroundModeIndicator(false);
+            }
+        });
+
+        this.socket.on('camera-keep-alive-status', (data) => {
+            if (data.streamActive) {
+                // Update last activity indicator
+                this.updateLastActivity();
+            }
+        });
     }
 
     async loadCameras() {
@@ -535,6 +553,77 @@ class CCTVViewer {
     updateStatus(message, type) {
         this.status.textContent = message;
         this.status.className = `status ${type}`;
+    }
+
+    showBackgroundModeIndicator(show) {
+        let indicator = document.getElementById('backgroundModeIndicator');
+        
+        if (show && !indicator) {
+            // Create background mode indicator
+            indicator = document.createElement('div');
+            indicator.id = 'backgroundModeIndicator';
+            indicator.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    background: #ff9500;
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    z-index: 1000;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                    animation: pulse 2s infinite;
+                ">
+                    📱 Camera in Background Mode
+                </div>
+                <style>
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.7; }
+                        100% { opacity: 1; }
+                    }
+                </style>
+            `;
+            document.body.appendChild(indicator);
+        } else if (!show && indicator) {
+            // Remove background mode indicator
+            indicator.remove();
+        }
+    }
+
+    updateLastActivity() {
+        let activityIndicator = document.getElementById('lastActivityIndicator');
+        
+        if (!activityIndicator) {
+            activityIndicator = document.createElement('div');
+            activityIndicator.id = 'lastActivityIndicator';
+            activityIndicator.style.cssText = `
+                position: fixed;
+                bottom: 10px;
+                right: 10px;
+                background: #28a745;
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                z-index: 999;
+                opacity: 0.8;
+            `;
+            document.body.appendChild(activityIndicator);
+        }
+        
+        const now = new Date();
+        activityIndicator.textContent = `📡 Last signal: ${now.toLocaleTimeString()}`;
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            if (activityIndicator) {
+                activityIndicator.style.opacity = '0.3';
+            }
+        }, 3000);
     }
 }
 
