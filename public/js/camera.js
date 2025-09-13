@@ -615,7 +615,12 @@ class CCTVCamera {
 
             const peerConnection = new RTCPeerConnection({
                 iceServers: [
-                    // Google STUN servers
+                    // Local STUN/TURN servers (high priority)
+                    { urls: 'stun:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3479' },
+                    
+                    // Google STUN servers (fallback)
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
@@ -626,7 +631,7 @@ class CCTVCamera {
                     { urls: 'stun:stun.services.mozilla.com' },
                     { urls: 'stun:stun.stunprotocol.org:3478' },
                     
-                    // Free TURN servers (may have limited bandwidth)
+                    // Public TURN servers (last resort)
                     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
                     { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
                     { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
@@ -2836,7 +2841,12 @@ class CCTVCamera {
             // Create peer connection for receiving audio
             const speakPeerConnection = new RTCPeerConnection({
                 iceServers: [
-                    // Google STUN servers
+                    // Local STUN/TURN servers (high priority)
+                    { urls: 'stun:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3479' },
+                    
+                    // Google STUN servers (fallback)
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
@@ -2847,7 +2857,7 @@ class CCTVCamera {
                     { urls: 'stun:stun.services.mozilla.com' },
                     { urls: 'stun:stun.stunprotocol.org:3478' },
                     
-                    // Free TURN servers (may have limited bandwidth)
+                    // Public TURN servers (last resort)
                     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
                     { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
                     { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
