@@ -1312,9 +1312,13 @@ class CCTVCamera {
     disableSecurityAlerts() {
         console.log('📴 Disabling security alert system...');
         this.alertsEnabled = false;
+        this.motionDetectionEnabled = false;
+        this.audioDetectionEnabled = false;
         
         this.stopMotionDetection();
         this.stopAudioDetection();
+        
+        console.log('✅ Security alert system fully disabled - no more alerts will be sent');
         
         // Notify viewers that alerts are disabled
         this.socket.emit('security-alerts-status', {
@@ -1340,10 +1344,10 @@ class CCTVCamera {
             
             console.log('👁️ Starting motion detection...');
             
-            // Analyze frames every 500ms
+            // Analyze frames more frequently for better sensitivity (every 250ms)
             this.motionDetectionInterval = setInterval(() => {
                 this.analyzeMotion();
-            }, 500);
+            }, 250);
             
         } catch (error) {
             console.error('Motion detection setup failed:', error);
@@ -1366,6 +1370,11 @@ class CCTVCamera {
     }
 
     analyzeMotion() {
+        // Safety check: don't analyze if alerts are disabled
+        if (!this.alertsEnabled || !this.motionDetectionEnabled) {
+            return;
+        }
+        
         if (!this.localVideo || this.localVideo.readyState !== 4) {
             return; // Video not ready
         }
@@ -1380,7 +1389,18 @@ class CCTVCamera {
                 const diff = this.calculateFrameDifference(currentFrameData.data, this.previousFrameData.data);
                 
                 // Check if motion exceeds threshold
-                if (diff > this.motionSensitivity) {
+                // Convert sensitivity to proper threshold: 0.1 = very sensitive (low threshold), 0.8 = less sensitive (high threshold)
+                // With improved algorithm, use sensitivity more directly but scaled appropriately
+                const threshold = this.motionSensitivity * 0.002; // Scale to 0.0002-0.0016 range for new algorithm
+                
+                console.log('🔍 Motion analysis:', {
+                    diff: diff.toFixed(6),
+                    sensitivity: this.motionSensitivity,
+                    threshold: threshold.toFixed(6),
+                    triggered: diff > threshold
+                });
+                
+                if (diff > threshold) {
                     this.onMotionDetected(diff);
                 }
             }
@@ -1395,7 +1415,9 @@ class CCTVCamera {
 
     calculateFrameDifference(current, previous) {
         let totalDiff = 0;
+        let significantPixels = 0;
         const pixels = current.length / 4; // RGBA = 4 values per pixel
+        const changeThreshold = 15; // Minimum change per pixel to count as significant
         
         for (let i = 0; i < pixels; i++) {
             const index = i * 4;
@@ -1403,14 +1425,30 @@ class CCTVCamera {
             const currentGray = (current[index] + current[index + 1] + current[index + 2]) / 3;
             const previousGray = (previous[index] + previous[index + 1] + previous[index + 2]) / 3;
             
-            totalDiff += Math.abs(currentGray - previousGray);
+            const pixelDiff = Math.abs(currentGray - previousGray);
+            
+            // Only count pixels with significant changes to reduce noise
+            if (pixelDiff > changeThreshold) {
+                totalDiff += pixelDiff;
+                significantPixels++;
+            }
         }
         
-        // Return normalized difference (0-1)
-        return totalDiff / (pixels * 255);
+        // Return percentage of significantly changed pixels
+        const changeRatio = significantPixels / pixels;
+        const avgIntensity = significantPixels > 0 ? (totalDiff / significantPixels) / 255 : 0;
+        
+        // Combine change ratio and intensity for better detection
+        return changeRatio * avgIntensity;
     }
 
     onMotionDetected(intensity) {
+        // Safety check: don't send alerts if system is disabled
+        if (!this.alertsEnabled || !this.motionDetectionEnabled) {
+            console.log('🚫 Motion detected but alerts are disabled - skipping alert');
+            return;
+        }
+        
         const now = Date.now();
         
         // Check cooldown period
@@ -1495,6 +1533,11 @@ class CCTVCamera {
     }
 
     analyzeAudio() {
+        // Safety check: don't analyze if alerts are disabled
+        if (!this.alertsEnabled || !this.audioDetectionEnabled) {
+            return;
+        }
+        
         if (!this.audioAnalyser) {
             return;
         }
@@ -1521,6 +1564,12 @@ class CCTVCamera {
     }
 
     onSuspiciousAudioDetected(volume) {
+        // Safety check: don't send alerts if system is disabled
+        if (!this.alertsEnabled || !this.audioDetectionEnabled) {
+            console.log('🚫 Suspicious audio detected but alerts are disabled - skipping alert');
+            return;
+        }
+        
         const now = Date.now();
         
         // Check cooldown period
