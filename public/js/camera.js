@@ -31,6 +31,28 @@ class CCTVCamera {
         this.backgroundInterval = null;
         this.streamMonitorInterval = null;
         
+        // Security alert system
+        this.alertsEnabled = false;
+        this.motionDetectionEnabled = false;
+        this.audioDetectionEnabled = false;
+        this.motionSensitivity = 0.3; // 0.1 = very sensitive, 0.5 = less sensitive
+        this.audioSensitivity = 0.7; // Volume threshold for suspicious sounds
+        this.alertCooldown = 10000; // 10 seconds between alerts of same type
+        this.lastMotionAlert = 0;
+        this.lastAudioAlert = 0;
+        
+        // Motion detection canvas and context
+        this.motionCanvas = null;
+        this.motionContext = null;
+        this.previousFrameData = null;
+        this.motionDetectionInterval = null;
+        
+        // Audio analysis
+        this.audioContext = null;
+        this.audioAnalyser = null;
+        this.audioDataArray = null;
+        this.audioDetectionInterval = null;
+        
         this.initializeEventListeners();
         this.initializeDefaults();
         this.detectBrowserAndDevice();
@@ -74,6 +96,123 @@ class CCTVCamera {
                 }
             });
         }
+
+        // Security alert event listeners
+        this.initializeAlertEventListeners();
+    }
+
+    initializeAlertEventListeners() {
+        const enableAlertsCheckbox = document.getElementById('enableAlerts');
+        const alertOptions = document.getElementById('alertOptions');
+        const enableMotionCheckbox = document.getElementById('enableMotionDetection');
+        const enableAudioCheckbox = document.getElementById('enableAudioDetection');
+        const motionSensitivitySlider = document.getElementById('motionSensitivity');
+        const audioSensitivitySlider = document.getElementById('audioSensitivity');
+        const alertCooldownInput = document.getElementById('alertCooldown');
+        const testMotionBtn = document.getElementById('testMotionBtn');
+        const testAudioBtn = document.getElementById('testAudioBtn');
+
+        // Show/hide alert options
+        if (enableAlertsCheckbox) {
+            enableAlertsCheckbox.addEventListener('change', (e) => {
+                console.log('🎯 Main security alerts checkbox changed by USER:', e.target.checked);
+                
+                if (alertOptions) {
+                    alertOptions.style.display = e.target.checked ? 'block' : 'none';
+                }
+                
+                if (e.target.checked && this.localStream) {
+                    this.enableSecurityAlerts();
+                } else {
+                    this.disableSecurityAlerts();
+                }
+            });
+        }
+
+        // Motion detection toggle
+        if (enableMotionCheckbox) {
+            enableMotionCheckbox.addEventListener('change', (e) => {
+                this.motionDetectionEnabled = e.target.checked;
+                this.updateAlertSettings({
+                    motionEnabled: this.motionDetectionEnabled
+                });
+            });
+        }
+
+        // Audio detection toggle
+        if (enableAudioCheckbox) {
+            enableAudioCheckbox.addEventListener('change', (e) => {
+                this.audioDetectionEnabled = e.target.checked;
+                this.updateAlertSettings({
+                    audioEnabled: this.audioDetectionEnabled
+                });
+            });
+        }
+
+        // Motion sensitivity slider
+        if (motionSensitivitySlider) {
+            motionSensitivitySlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('motionSensitivityValue').textContent = value;
+                this.updateAlertSettings({
+                    motionSensitivity: value
+                });
+            });
+        }
+
+        // Audio sensitivity slider
+        if (audioSensitivitySlider) {
+            audioSensitivitySlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('audioSensitivityValue').textContent = value;
+                this.updateAlertSettings({
+                    audioSensitivity: value
+                });
+            });
+        }
+
+        // Alert cooldown input
+        if (alertCooldownInput) {
+            alertCooldownInput.addEventListener('change', (e) => {
+                const seconds = parseInt(e.target.value);
+                this.updateAlertSettings({
+                    cooldownSeconds: seconds
+                });
+            });
+        }
+
+        // Test buttons
+        if (testMotionBtn) {
+            testMotionBtn.addEventListener('click', () => {
+                this.testMotionDetection();
+            });
+        }
+
+        if (testAudioBtn) {
+            testAudioBtn.addEventListener('click', () => {
+                this.testAudioDetection();
+            });
+        }
+    }
+
+    testMotionDetection() {
+        if (!this.alertsEnabled) {
+            alert('Please enable security alerts first');
+            return;
+        }
+
+        console.log('🧪 Testing motion detection...');
+        this.onMotionDetected(0.5); // Simulate 50% motion intensity
+    }
+
+    testAudioDetection() {
+        if (!this.alertsEnabled) {
+            alert('Please enable security alerts first');
+            return;
+        }
+
+        console.log('🧪 Testing audio detection...');
+        this.onSuspiciousAudioDetected(0.8); // Simulate 80% volume level
     }
 
     async initializeAuthentication() {
@@ -309,6 +448,16 @@ class CCTVCamera {
             console.log('Viewer requesting device switch:', data);
             this.handleRemoteDeviceSwitch(data.deviceType, data.deviceId, data.viewerId);
         });
+
+        this.socket.on('alert-settings-update', (settings) => {
+            console.log('Received alert settings update from viewer:', settings);
+            this.updateAlertSettings(settings);
+        });
+
+        this.socket.on('send-current-alert-settings', (data) => {
+            console.log('Viewer requesting current alert settings');
+            this.sendCurrentAlertSettings(data.requesterId);
+        });
     }
 
     async startCamera() {
@@ -368,6 +517,12 @@ class CCTVCamera {
             this.cameraNameInput.disabled = true;
             this.deviceInfoInput.disabled = true;
             this.updateStatus(`📺 "${cameraName}" active - Ready for viewers`, 'connected');
+            
+            // Show security alert configuration
+            const securityAlertsConfig = document.getElementById('securityAlertsConfig');
+            if (securityAlertsConfig) {
+                securityAlertsConfig.style.display = 'block';
+            }
 
         } catch (error) {
             console.error('Error starting camera:', error);
@@ -396,6 +551,9 @@ class CCTVCamera {
     }
 
     stopCamera() {
+        // Clean up security alerts
+        this.disableSecurityAlerts();
+        
         // Clean up background streaming resources
         this.stopBackgroundKeepAlive();
         this.disableBackgroundMode();
@@ -416,6 +574,12 @@ class CCTVCamera {
         this.cameraNameInput.disabled = false;
         this.deviceInfoInput.disabled = false;
         this.updateStatus('📴 Camera stopped', 'disconnected');
+        
+        // Hide security alert configuration
+        const securityAlertsConfig = document.getElementById('securityAlertsConfig');
+        if (securityAlertsConfig) {
+            securityAlertsConfig.style.display = 'none';
+        }
     }
 
     async createOfferForViewer(viewerId) {
@@ -1115,6 +1279,421 @@ class CCTVCamera {
             this.updateStatus('❌ Background stream recovery failed', 'error');
         }
     }
+
+    // ==================== SECURITY ALERT SYSTEM ====================
+
+    enableSecurityAlerts() {
+        if (!this.localStream) {
+            console.warn('Cannot enable alerts: no active stream');
+            return;
+        }
+        
+        console.log('🚨 Enabling security alert system...');
+        this.alertsEnabled = true;
+        
+        if (this.motionDetectionEnabled) {
+            this.startMotionDetection();
+        }
+        
+        if (this.audioDetectionEnabled) {
+            this.startAudioDetection();
+        }
+        
+        // Notify viewers that alerts are enabled
+        this.socket.emit('security-alerts-status', {
+            enabled: true,
+            motionEnabled: this.motionDetectionEnabled,
+            audioEnabled: this.audioDetectionEnabled
+        });
+        
+        this.updateStatus('🚨 Security alerts enabled', 'connected');
+    }
+
+    disableSecurityAlerts() {
+        console.log('📴 Disabling security alert system...');
+        this.alertsEnabled = false;
+        
+        this.stopMotionDetection();
+        this.stopAudioDetection();
+        
+        // Notify viewers that alerts are disabled
+        this.socket.emit('security-alerts-status', {
+            enabled: false,
+            motionEnabled: false,
+            audioEnabled: false
+        });
+        
+        this.updateStatus('📴 Security alerts disabled', 'connected');
+    }
+
+    startMotionDetection() {
+        if (!this.localVideo || !this.alertsEnabled) {
+            return;
+        }
+        
+        try {
+            // Create motion detection canvas
+            this.motionCanvas = document.createElement('canvas');
+            this.motionCanvas.width = 160; // Smaller for performance
+            this.motionCanvas.height = 120;
+            this.motionContext = this.motionCanvas.getContext('2d');
+            
+            console.log('👁️ Starting motion detection...');
+            
+            // Analyze frames every 500ms
+            this.motionDetectionInterval = setInterval(() => {
+                this.analyzeMotion();
+            }, 500);
+            
+        } catch (error) {
+            console.error('Motion detection setup failed:', error);
+        }
+    }
+
+    stopMotionDetection() {
+        if (this.motionDetectionInterval) {
+            clearInterval(this.motionDetectionInterval);
+            this.motionDetectionInterval = null;
+        }
+        
+        if (this.motionCanvas) {
+            this.motionCanvas = null;
+            this.motionContext = null;
+            this.previousFrameData = null;
+        }
+        
+        console.log('👁️ Motion detection stopped');
+    }
+
+    analyzeMotion() {
+        if (!this.localVideo || this.localVideo.readyState !== 4) {
+            return; // Video not ready
+        }
+        
+        try {
+            // Draw current video frame to canvas
+            this.motionContext.drawImage(this.localVideo, 0, 0, 160, 120);
+            const currentFrameData = this.motionContext.getImageData(0, 0, 160, 120);
+            
+            if (this.previousFrameData) {
+                // Calculate difference between frames
+                const diff = this.calculateFrameDifference(currentFrameData.data, this.previousFrameData.data);
+                
+                // Check if motion exceeds threshold
+                if (diff > this.motionSensitivity) {
+                    this.onMotionDetected(diff);
+                }
+            }
+            
+            // Store current frame for next comparison
+            this.previousFrameData = currentFrameData;
+            
+        } catch (error) {
+            console.error('Motion analysis failed:', error);
+        }
+    }
+
+    calculateFrameDifference(current, previous) {
+        let totalDiff = 0;
+        const pixels = current.length / 4; // RGBA = 4 values per pixel
+        
+        for (let i = 0; i < pixels; i++) {
+            const index = i * 4;
+            // Calculate grayscale difference for performance
+            const currentGray = (current[index] + current[index + 1] + current[index + 2]) / 3;
+            const previousGray = (previous[index] + previous[index + 1] + previous[index + 2]) / 3;
+            
+            totalDiff += Math.abs(currentGray - previousGray);
+        }
+        
+        // Return normalized difference (0-1)
+        return totalDiff / (pixels * 255);
+    }
+
+    onMotionDetected(intensity) {
+        const now = Date.now();
+        
+        // Check cooldown period
+        if (now - this.lastMotionAlert < this.alertCooldown) {
+            return; // Still in cooldown
+        }
+        
+        this.lastMotionAlert = now;
+        
+        console.warn(`🚨 Motion detected! Intensity: ${intensity.toFixed(3)}`);
+        
+        // Send alert to all viewers
+        this.socket.emit('security-alert', {
+            type: 'motion',
+            timestamp: now,
+            intensity: intensity,
+            message: `Motion detected - Intensity: ${Math.round(intensity * 100)}%`,
+            cameraName: this.cameraNameInput.value || 'Unknown Camera'
+        });
+        
+        // Show local notification
+        this.updateStatus(`🚨 Motion Alert - Intensity: ${Math.round(intensity * 100)}%`, 'warning');
+        setTimeout(() => {
+            if (this.status.textContent.includes('Motion Alert')) {
+                this.updateStatus('📹 Camera streaming - Security alerts active', 'connected');
+            }
+        }, 3000);
+    }
+
+    startAudioDetection() {
+        if (!this.localStream || !this.alertsEnabled) {
+            return;
+        }
+        
+        try {
+            // Create audio context and analyser
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioAnalyser = this.audioContext.createAnalyser();
+            this.audioAnalyser.fftSize = 256;
+            
+            const bufferLength = this.audioAnalyser.frequencyBinCount;
+            this.audioDataArray = new Uint8Array(bufferLength);
+            
+            // Get audio track from stream
+            const audioTracks = this.localStream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                console.warn('No audio track available for audio detection');
+                return;
+            }
+            
+            // Create audio source from stream
+            const source = this.audioContext.createMediaStreamSource(this.localStream);
+            source.connect(this.audioAnalyser);
+            
+            console.log('🔊 Starting audio detection...');
+            
+            // Analyze audio every 200ms
+            this.audioDetectionInterval = setInterval(() => {
+                this.analyzeAudio();
+            }, 200);
+            
+        } catch (error) {
+            console.error('Audio detection setup failed:', error);
+        }
+    }
+
+    stopAudioDetection() {
+        if (this.audioDetectionInterval) {
+            clearInterval(this.audioDetectionInterval);
+            this.audioDetectionInterval = null;
+        }
+        
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+        
+        this.audioAnalyser = null;
+        this.audioDataArray = null;
+        
+        console.log('🔊 Audio detection stopped');
+    }
+
+    analyzeAudio() {
+        if (!this.audioAnalyser) {
+            return;
+        }
+        
+        try {
+            // Get frequency data
+            this.audioAnalyser.getByteFrequencyData(this.audioDataArray);
+            
+            // Calculate average volume
+            let sum = 0;
+            for (let i = 0; i < this.audioDataArray.length; i++) {
+                sum += this.audioDataArray[i];
+            }
+            const averageVolume = sum / this.audioDataArray.length / 255; // Normalize to 0-1
+            
+            // Check for volume spikes (suspicious sounds)
+            if (averageVolume > this.audioSensitivity) {
+                this.onSuspiciousAudioDetected(averageVolume);
+            }
+            
+        } catch (error) {
+            console.error('Audio analysis failed:', error);
+        }
+    }
+
+    onSuspiciousAudioDetected(volume) {
+        const now = Date.now();
+        
+        // Check cooldown period
+        if (now - this.lastAudioAlert < this.alertCooldown) {
+            return; // Still in cooldown
+        }
+        
+        this.lastAudioAlert = now;
+        
+        console.warn(`🔊 Suspicious audio detected! Volume: ${volume.toFixed(3)}`);
+        
+        // Send alert to all viewers
+        this.socket.emit('security-alert', {
+            type: 'audio',
+            timestamp: now,
+            volume: volume,
+            message: `Suspicious sound detected - Volume: ${Math.round(volume * 100)}%`,
+            cameraName: this.cameraNameInput.value || 'Unknown Camera'
+        });
+        
+        // Show local notification
+        this.updateStatus(`🔊 Audio Alert - Volume: ${Math.round(volume * 100)}%`, 'warning');
+        setTimeout(() => {
+            if (this.status.textContent.includes('Audio Alert')) {
+                this.updateStatus('📹 Camera streaming - Security alerts active', 'connected');
+            }
+        }, 3000);
+    }
+
+    updateAlertSettings(settings) {
+        this.motionDetectionEnabled = settings.motionEnabled ?? this.motionDetectionEnabled;
+        this.audioDetectionEnabled = settings.audioEnabled ?? this.audioDetectionEnabled;
+        this.motionSensitivity = settings.motionSensitivity ?? this.motionSensitivity;
+        this.audioSensitivity = settings.audioSensitivity ?? this.audioSensitivity;
+        this.alertCooldown = settings.cooldownSeconds ? settings.cooldownSeconds * 1000 : this.alertCooldown;
+        
+        // Only update alertsEnabled if the settings explicitly provide enabled/disabled states
+        // This prevents auto-disabling when other settings are changed
+        if (settings.hasOwnProperty('motionEnabled') || settings.hasOwnProperty('audioEnabled')) {
+            const shouldEnable = this.motionDetectionEnabled || this.audioDetectionEnabled;
+            const wasEnabled = this.alertsEnabled;
+            this.alertsEnabled = shouldEnable;
+            
+            console.log('🔄 Security alerts status change:', {
+                wasEnabled,
+                nowEnabled: this.alertsEnabled,
+                reason: 'settings update',
+                settings: settings
+            });
+        } else {
+            console.log('⚡ Preserving current alert status during settings update:', {
+                alertsEnabled: this.alertsEnabled,
+                receivedSettings: settings
+            });
+        }
+        
+        console.log('🔧 Alert settings updated:', {
+            alertsEnabled: this.alertsEnabled,
+            motion: this.motionDetectionEnabled,
+            audio: this.audioDetectionEnabled,
+            motionSensitivity: this.motionSensitivity,
+            audioSensitivity: this.audioSensitivity,
+            cooldown: this.alertCooldown / 1000 + 's'
+        });
+        
+        // Update UI elements to reflect new settings
+        this.updateAlertSettingsUI();
+        
+        // Show temporary notification
+        this.updateStatus('🔧 Alert settings updated from viewer', 'connected');
+        setTimeout(() => {
+            if (this.status.textContent.includes('Alert settings updated')) {
+                this.updateStatus('📹 Camera streaming - Security alerts active', 'connected');
+            }
+        }, 3000);
+        
+        // Restart detection with new settings
+        if (this.alertsEnabled) {
+            this.stopMotionDetection();
+            this.stopAudioDetection();
+            
+            if (this.motionDetectionEnabled) {
+                this.startMotionDetection();
+            }
+            
+            if (this.audioDetectionEnabled) {
+                this.startAudioDetection();
+            }
+        }
+    }
+
+    updateAlertSettingsUI() {
+        // Update checkboxes
+        const enableAlertsCheckbox = document.getElementById('enableAlerts');
+        const enableMotionCheckbox = document.getElementById('enableMotionDetection');
+        const enableAudioCheckbox = document.getElementById('enableAudioDetection');
+        const motionSensitivitySlider = document.getElementById('motionSensitivity');
+        const audioSensitivitySlider = document.getElementById('audioSensitivity');
+        const alertCooldownInput = document.getElementById('alertCooldown');
+
+        // Update main enable alerts checkbox - but be more conservative about disabling it
+        if (enableAlertsCheckbox) {
+            const shouldBeEnabled = this.motionDetectionEnabled || this.audioDetectionEnabled;
+            const currentlyChecked = enableAlertsCheckbox.checked;
+            
+            // Only update checkbox if there's a significant change needed
+            if (shouldBeEnabled !== currentlyChecked) {
+                enableAlertsCheckbox.checked = shouldBeEnabled;
+                console.log('🔄 Updated main enableAlerts checkbox:', currentlyChecked, '->', shouldBeEnabled);
+            } else {
+                console.log('⚡ Preserving main enableAlerts checkbox state:', currentlyChecked);
+            }
+            
+            // Show/hide the alert options panel based on the actual checkbox state
+            const alertOptions = document.getElementById('alertOptions');
+            if (alertOptions) {
+                const showPanel = enableAlertsCheckbox.checked;
+                alertOptions.style.display = showPanel ? 'block' : 'none';
+                console.log('🔄 Updated alertOptions panel visibility to:', showPanel ? 'visible' : 'hidden');
+            }
+        }
+
+        if (enableMotionCheckbox) {
+            enableMotionCheckbox.checked = this.motionDetectionEnabled;
+        }
+
+        if (enableAudioCheckbox) {
+            enableAudioCheckbox.checked = this.audioDetectionEnabled;
+        }
+
+        if (motionSensitivitySlider) {
+            motionSensitivitySlider.value = this.motionSensitivity;
+            const motionValueSpan = document.getElementById('motionSensitivityValue');
+            if (motionValueSpan) {
+                motionValueSpan.textContent = this.motionSensitivity;
+            }
+        }
+
+        if (audioSensitivitySlider) {
+            audioSensitivitySlider.value = this.audioSensitivity;
+            const audioValueSpan = document.getElementById('audioSensitivityValue');
+            if (audioValueSpan) {
+                audioValueSpan.textContent = this.audioSensitivity;
+            }
+        }
+
+        if (alertCooldownInput) {
+            alertCooldownInput.value = this.alertCooldown / 1000;
+        }
+
+        console.log('📱 Camera UI updated with new alert settings');
+    }
+
+    sendCurrentAlertSettings(requesterId) {
+        const currentSettings = {
+            motionEnabled: this.motionDetectionEnabled,
+            audioEnabled: this.audioDetectionEnabled,
+            motionSensitivity: this.motionSensitivity,
+            audioSensitivity: this.audioSensitivity,
+            cooldownSeconds: this.alertCooldown / 1000,
+            alertsEnabled: this.alertsEnabled
+        };
+
+        // Send current settings back to requesting viewer
+        this.socket.emit('send-alert-settings-to-viewer', {
+            requesterId: requesterId,
+            settings: currentSettings
+        });
+
+        console.log('📋 Sent current alert settings to viewer:', currentSettings);
+    }
+
+    // ==================== END SECURITY ALERT SYSTEM ====================
 
     enableAggressiveBackgroundMode() {
         console.log('🚀 Enabling aggressive background mode for mobile...');

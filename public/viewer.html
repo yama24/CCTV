@@ -67,6 +67,37 @@
                     <button id="refreshDevicesBtn">🔄 Refresh Devices</button>
                 </div>
             </div>
+
+            <!-- Security Alert Activation Panel -->
+            <div class="security-activation" id="securityActivation" style="display: none;">
+                <div class="activation-header">
+                    <h4>🛡️ Security Alert System</h4>
+                    <div class="activation-status" id="activationStatus">
+                        <span class="status-text">Inactive</span>
+                    </div>
+                </div>
+                <div class="activation-controls">
+                    <button id="activateSecurityBtn" class="activate-btn">
+                        🚀 Activate Security Alerts
+                    </button>
+                    <button id="deactivateSecurityBtn" class="deactivate-btn" style="display: none;">
+                        ⏹️ Deactivate Security Alerts
+                    </button>
+                    <button id="configureAlertSettingsBtn">⚙️ Configure Settings</button>
+                </div>
+            </div>
+
+            <!-- Alert History Panel -->
+            <div class="alert-controls" id="alertControls" style="display: none;">
+                <h4>🚨 Security Alerts</h4>
+                <div class="alert-history" id="alertHistory">
+                    <div class="no-alerts">No alerts yet</div>
+                </div>
+                <div class="alert-actions">
+                    <button id="clearAlertsBtn">🗑️ Clear History</button>
+                    <!-- <button id="showAlertSettingsBtn">⚙️ Settings</button> -->
+                </div>
+            </div>
         </div>
 
         <div class="video-container">

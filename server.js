@@ -450,6 +450,34 @@ app.get('/api/admin/stats', requireApiAuth, (req, res) => {
 const rooms = new Map();
 const cameras = new Map(); // Track camera metadata
 
+// Security alert logging function
+function logSecurityAlert(alertData) {
+    try {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: alertData.type,
+            cameraName: alertData.cameraName,
+            roomId: alertData.roomId,
+            intensity: alertData.intensity || alertData.volume || 'N/A',
+            message: alertData.message,
+            sourceId: alertData.sourceId
+        };
+        
+        // Log to console with emoji for visibility
+        const emoji = alertData.type === 'motion' ? '👁️' : '🔊';
+        console.log(`${emoji} SECURITY LOG [${logEntry.timestamp}] ${logEntry.cameraName}: ${logEntry.message}`);
+        
+        // In a production environment, you might want to:
+        // 1. Write to a dedicated security log file
+        // 2. Store in database for analysis
+        // 3. Send to external monitoring service
+        // 4. Trigger additional security responses
+        
+    } catch (error) {
+        console.error('Failed to log security alert:', error);
+    }
+}
+
 // WebSocket authentication middleware
 io.use((socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.query.token;
@@ -816,6 +844,177 @@ io.on('connection', (socket) => {
         // Simple ping/pong to keep connection alive
         socket.emit('pong', { timestamp: data.timestamp, serverTime: Date.now() });
     });
+
+    // ==================== SECURITY ALERT HANDLERS ====================
+
+    // Handle security alert broadcasts
+    socket.on('security-alert', (alertData) => {
+        try {
+            if (!socket.roomId || socket.role !== 'camera') {
+                socket.emit('error', { message: 'Only cameras can send security alerts' });
+                return;
+            }
+
+            const room = rooms.get(socket.roomId);
+            if (!room) {
+                return;
+            }
+
+            // Add server timestamp and source info
+            const enhancedAlert = {
+                ...alertData,
+                serverTimestamp: Date.now(),
+                sourceId: socket.id,
+                roomId: socket.roomId
+            };
+
+            console.log(`🚨 Security Alert [${alertData.type.toUpperCase()}] from ${alertData.cameraName}:`, alertData.message);
+
+            // Broadcast to all viewers in the room
+            room.viewers.forEach(viewerId => {
+                const viewerSocket = io.sockets.sockets.get(viewerId);
+                if (viewerSocket) {
+                    viewerSocket.emit('security-alert-received', enhancedAlert);
+                }
+            });
+
+            // Log the alert for potential future analysis
+            logSecurityAlert(enhancedAlert);
+
+        } catch (error) {
+            console.error('Error handling security alert:', error);
+            socket.emit('error', { message: 'Failed to process security alert' });
+        }
+    });
+
+    // Handle security alert status updates
+    socket.on('security-alerts-status', (statusData) => {
+        try {
+            if (!socket.roomId || socket.role !== 'camera') {
+                return;
+            }
+
+            const room = rooms.get(socket.roomId);
+            if (!room) {
+                return;
+            }
+
+            console.log(`🛡️ Security alerts ${statusData.enabled ? 'enabled' : 'disabled'} for camera in room ${socket.roomId}`);
+
+            // Notify all viewers about alert status
+            room.viewers.forEach(viewerId => {
+                const viewerSocket = io.sockets.sockets.get(viewerId);
+                if (viewerSocket) {
+                    viewerSocket.emit('security-alerts-status-update', {
+                        ...statusData,
+                        roomId: socket.roomId,
+                        timestamp: Date.now()
+                    });
+                }
+            });
+
+        } catch (error) {
+            console.error('Error handling security alert status:', error);
+        }
+    });
+
+    // Handle alert settings update from viewers
+    socket.on('update-alert-settings', (settings) => {
+        try {
+            // Use targetRoomId if provided, otherwise use current room
+            const targetRoomId = settings.targetRoomId || socket.roomId;
+            
+            if (!targetRoomId) {
+                socket.emit('error', { message: 'No target room specified' });
+                return;
+            }
+
+            const room = rooms.get(targetRoomId);
+            if (!room) {
+                socket.emit('error', { message: 'Target room not found' });
+                return;
+            }
+
+            // Only viewers in the room or the camera itself can update settings
+            if (socket.role !== 'viewer' && socket.role !== 'camera') {
+                socket.emit('error', { message: 'Unauthorized to change alert settings' });
+                return;
+            }
+
+            // For viewers, verify they're actually connected to this room
+            if (socket.role === 'viewer' && socket.roomId !== targetRoomId) {
+                socket.emit('error', { message: 'Can only control alerts for cameras you are viewing' });
+                return;
+            }
+
+            // Forward settings to camera (remove targetRoomId from settings before sending)
+            const { targetRoomId: _, ...cameraSettings } = settings;
+            const cameraSocket = io.sockets.sockets.get(room.camera);
+            if (cameraSocket) {
+                cameraSocket.emit('alert-settings-update', cameraSettings);
+                console.log(`🔧 Alert settings update sent to camera in room ${targetRoomId}:`, cameraSettings);
+                
+                // Confirm to viewer
+                socket.emit('alert-settings-updated', { 
+                    success: true, 
+                    settings: cameraSettings,
+                    roomId: targetRoomId 
+                });
+            } else {
+                socket.emit('error', { message: 'Camera not available' });
+            }
+
+        } catch (error) {
+            console.error('Error updating alert settings:', error);
+            socket.emit('error', { message: 'Failed to update alert settings' });
+        }
+    });
+
+    // Handle request for current alert settings
+    socket.on('request-alert-settings', (data) => {
+        try {
+            const roomId = data.roomId || socket.roomId;
+            
+            if (!roomId) {
+                socket.emit('error', { message: 'No room specified' });
+                return;
+            }
+
+            const room = rooms.get(roomId);
+            if (!room) {
+                socket.emit('error', { message: 'Room not found' });
+                return;
+            }
+
+            // Forward request to camera
+            const cameraSocket = io.sockets.sockets.get(room.camera);
+            if (cameraSocket) {
+                cameraSocket.emit('send-current-alert-settings', { requesterId: socket.id });
+                console.log(`📋 Alert settings request forwarded to camera in room ${roomId}`);
+            } else {
+                socket.emit('error', { message: 'Camera not available' });
+            }
+
+        } catch (error) {
+            console.error('Error requesting alert settings:', error);
+            socket.emit('error', { message: 'Failed to request alert settings' });
+        }
+    });
+
+    // Handle camera sending current settings to viewer
+    socket.on('send-alert-settings-to-viewer', (data) => {
+        try {
+            const viewerSocket = io.sockets.sockets.get(data.requesterId);
+            if (viewerSocket) {
+                viewerSocket.emit('current-alert-settings', data.settings);
+                console.log(`📋 Alert settings sent from camera to viewer ${data.requesterId}`);
+            }
+        } catch (error) {
+            console.error('Error sending alert settings to viewer:', error);
+        }
+    });
+
+    // ==================== END SECURITY ALERT HANDLERS ====================
 
     // Handle disconnect
     socket.on('disconnect', () => {
