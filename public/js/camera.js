@@ -9,7 +9,7 @@ class CCTVCamera {
         this.cameraNameInput = document.getElementById('cameraName');
         this.deviceInfoInput = document.getElementById('deviceInfo');
         this.cameraPlaceholder = document.getElementById('cameraPlaceholder');
-        
+
         this.localStream = null;
         this.peerConnections = new Map(); // Store multiple connections for multiple viewers
         this.roomId = null; // Will be generated based on camera name
@@ -21,7 +21,7 @@ class CCTVCamera {
             video: null,
             audio: null
         };
-        
+
         // Enhanced background streaming support
         this.isBackgroundMode = false;
         this.backgroundKeepAlive = null;
@@ -30,7 +30,7 @@ class CCTVCamera {
         this.backgroundCanvas = null;
         this.backgroundInterval = null;
         this.streamMonitorInterval = null;
-        
+
         // Security alert system
         this.alertsEnabled = false;
         this.motionDetectionEnabled = false;
@@ -40,13 +40,13 @@ class CCTVCamera {
         this.alertCooldown = 10000; // 10 seconds between alerts of same type
         this.lastMotionAlert = 0;
         this.lastAudioAlert = 0;
-        
+
         // Motion detection canvas and context
         this.motionCanvas = null;
         this.motionContext = null;
         this.previousFrameData = null;
         this.motionDetectionInterval = null;
-        
+
         // Audio analysis
         this.audioContext = null;
         this.audioAnalyser = null;
@@ -56,19 +56,19 @@ class CCTVCamera {
         // Speak mode (receiving audio from viewers)
         this.speakPeerConnections = new Map(); // Store connections for receiving audio from viewers
         this.speakAudioElement = null; // Audio element to play received speech
-        
+
         this.initializeEventListeners();
         this.initializeDefaults();
         this.detectBrowserAndDevice();
         this.loadAvailableDevices();
         this.hideVideo(); // Initially hide video until camera starts
-        
+
         // Listen for device changes
         this.setupDeviceChangeListeners();
-        
+
         // Setup background streaming support
         this.setupBackgroundStreaming();
-        
+
         // Initialize authentication and socket connection
         this.initializeAuthentication();
     }
@@ -76,11 +76,11 @@ class CCTVCamera {
     initializeEventListeners() {
         this.startBtn.addEventListener('click', () => this.startCamera());
         this.stopBtn.addEventListener('click', () => this.stopCamera());
-        
+
         // Device selection change listeners
         const videoSelect = document.getElementById('videoDeviceSelect');
         const audioSelect = document.getElementById('audioDeviceSelect');
-        
+
         if (videoSelect) {
             videoSelect.addEventListener('change', (e) => {
                 if (e.target.value && this.localStream) {
@@ -90,7 +90,7 @@ class CCTVCamera {
                 }
             });
         }
-        
+
         if (audioSelect) {
             audioSelect.addEventListener('change', (e) => {
                 if (e.target.value && this.localStream) {
@@ -120,11 +120,11 @@ class CCTVCamera {
         if (enableAlertsCheckbox) {
             enableAlertsCheckbox.addEventListener('change', (e) => {
                 console.log('🎯 Main security alerts checkbox changed by USER:', e.target.checked);
-                
+
                 if (alertOptions) {
                     alertOptions.style.display = e.target.checked ? 'block' : 'none';
                 }
-                
+
                 if (e.target.checked && this.localStream) {
                     this.enableSecurityAlerts();
                 } else {
@@ -225,29 +225,29 @@ class CCTVCamera {
             const response = await fetch('/api/auth/token', {
                 credentials: 'include'
             });
-            
+
             if (!response.ok) {
                 throw new Error('Failed to get authentication token');
             }
-            
+
             const data = await response.json();
             this.authToken = data.token;
-            
+
             // Initialize socket connection with authentication
             this.socket = io({
                 auth: {
                     token: this.authToken
                 }
             });
-            
+
             this.initializeSocketListeners();
-            
+
             // Load user information and setup UI
             this.loadUserInfo();
-            
+
             // Set up periodic token validation (every 5 minutes)
             setInterval(() => this.validateToken(), 5 * 60 * 1000);
-            
+
         } catch (error) {
             console.error('Authentication failed:', error);
             alert('Authentication failed. Please log in again.');
@@ -260,7 +260,7 @@ class CCTVCamera {
             const response = await fetch('/api/auth/user', {
                 credentials: 'include'
             });
-            
+
             if (response.ok) {
                 const user = await response.json();
                 this.displayUserInfo(user);
@@ -297,16 +297,16 @@ class CCTVCamera {
                     'Authorization': `Bearer ${this.authToken}`
                 }
             });
-            
+
             if (!response.ok) {
                 throw new Error('Token validation failed');
             }
-            
+
             const result = await response.json();
             if (!result.valid) {
                 throw new Error('Token is no longer valid');
             }
-            
+
         } catch (error) {
             console.error('Token validation failed:', error);
             alert('Your session has expired. Please log in again.');
@@ -318,11 +318,11 @@ class CCTVCamera {
         // Set default values
         const defaultCameraName = `Camera-${Math.random().toString(36).substr(2, 5)}`;
         this.cameraNameInput.value = defaultCameraName;
-        
+
         // Try to get actual device name
         this.getDeviceName().then(deviceName => {
             this.deviceInfoInput.value = deviceName;
-            
+
             // Add a hint to help users set the correct device name
             this.deviceInfoInput.placeholder = 'e.g., John\'s Laptop or Office-PC';
             this.deviceInfoInput.title = 'Enter your computer/device name for easier identification';
@@ -333,15 +333,15 @@ class CCTVCamera {
         try {
             // Try to get device name from various sources
             let deviceName = 'Unknown Device';
-            
+
             // Method 1: Try WebRTC to get local IP and potentially hostname
             try {
-                const rtcConnection = new RTCPeerConnection({iceServers: []});
+                const rtcConnection = new RTCPeerConnection({ iceServers: [] });
                 rtcConnection.createDataChannel('');
-                
+
                 const offer = await rtcConnection.createOffer();
                 await rtcConnection.setLocalDescription(offer);
-                
+
                 // Extract local IP from ICE candidates (may help identify device)
                 const localIP = await new Promise((resolve) => {
                     rtcConnection.onicecandidate = (event) => {
@@ -355,19 +355,19 @@ class CCTVCamera {
                     };
                     setTimeout(() => resolve(null), 1000); // Timeout after 1 second
                 });
-                
+
                 if (localIP && localIP !== '127.0.0.1') {
                     deviceName = `Device-${localIP.split('.').slice(-2).join('-')}`;
                 }
-                
+
                 rtcConnection.close();
             } catch (rtcError) {
                 console.log('WebRTC method failed:', rtcError);
             }
-            
+
             // Method 2: Parse User Agent for device information (no domain/hostname)
             const userAgent = navigator.userAgent;
-            
+
             // Extract device info from user agent patterns
             if (userAgent.includes('Windows NT')) {
                 const match = userAgent.match(/Windows NT ([\d.]+)/);
@@ -384,15 +384,15 @@ class CCTVCamera {
                 const match = userAgent.match(/OS ([\d_]+)/);
                 deviceName = match ? `iOS-${match[1].replace(/_/g, '.')}-Device` : 'iOS-Device';
             }
-            
+
             // Try to add more specific device info if available
             const platform = navigator.platform;
             if (platform && !deviceName.includes(platform)) {
                 deviceName = `${platform}-${deviceName}`;
             }
-            
+
             return deviceName;
-            
+
         } catch (error) {
             console.log('Could not determine device name:', error);
             return 'Unknown-Device';
@@ -486,7 +486,7 @@ class CCTVCamera {
             // Validate inputs
             const cameraName = this.cameraNameInput.value.trim();
             const deviceInfo = this.deviceInfoInput.value.trim();
-            
+
             if (!cameraName) {
                 this.updateStatus('❌ Please enter a camera name', 'disconnected');
                 return;
@@ -494,9 +494,9 @@ class CCTVCamera {
 
             // Generate unique room ID based on camera name and timestamp
             this.roomId = `camera-${cameraName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${Date.now()}`;
-            
+
             this.updateStatus('📷 Starting camera...', 'disconnected');
-            
+
             // Build constraints with selected devices
             const constraints = {
                 video: {
@@ -510,7 +510,7 @@ class CCTVCamera {
                     autoGainControl: true
                 }
             };
-            
+
             // Use selected devices if available
             if (this.currentDevices.video) {
                 constraints.video.deviceId = { exact: this.currentDevices.video };
@@ -518,13 +518,13 @@ class CCTVCamera {
             if (this.currentDevices.audio) {
                 constraints.audio.deviceId = { exact: this.currentDevices.audio };
             }
-            
+
             // Get user media with selected devices using safe method
             this.localStream = await this.getUserMediaSafely(constraints);
 
             this.localVideo.srcObject = this.localStream;
             this.showVideo();
-            
+
             // Join the room as a camera with metadata
             this.socket.emit('join-room', {
                 roomId: this.roomId,
@@ -538,7 +538,7 @@ class CCTVCamera {
             this.cameraNameInput.disabled = true;
             this.deviceInfoInput.disabled = true;
             this.updateStatus(`📺 "${cameraName}" active - Ready for viewers`, 'connected');
-            
+
             // Show security alert configuration
             const securityAlertsConfig = document.getElementById('securityAlertsConfig');
             if (securityAlertsConfig) {
@@ -547,9 +547,9 @@ class CCTVCamera {
 
         } catch (error) {
             console.error('Error starting camera:', error);
-            
+
             let errorMessage = 'Error starting camera: ';
-            
+
             // Provide specific error messages for common issues
             if (error.name === 'NotAllowedError') {
                 errorMessage = '❌ Camera access denied. Please allow camera permissions and try again.';
@@ -566,7 +566,7 @@ class CCTVCamera {
             } else {
                 errorMessage += error.message;
             }
-            
+
             this.updateStatus(errorMessage, 'error');
         }
     }
@@ -574,18 +574,18 @@ class CCTVCamera {
     stopCamera() {
         // Clean up security alerts
         this.disableSecurityAlerts();
-        
+
         // Clean up background streaming resources
         this.stopBackgroundKeepAlive();
         this.disableBackgroundMode();
-        
+
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
         }
 
         this.hideVideo();
-        
+
         // Close all peer connections
         this.peerConnections.forEach(pc => pc.close());
         this.peerConnections.clear();
@@ -598,7 +598,7 @@ class CCTVCamera {
         this.cameraNameInput.disabled = false;
         this.deviceInfoInput.disabled = false;
         this.updateStatus('📴 Camera stopped', 'disconnected');
-        
+
         // Hide security alert configuration
         const securityAlertsConfig = document.getElementById('securityAlertsConfig');
         if (securityAlertsConfig) {
@@ -614,27 +614,52 @@ class CCTVCamera {
             }
 
             const peerConnection = new RTCPeerConnection({
+                // iceServers: [
+                //     // Local STUN/TURN servers (high priority)
+                //     { urls: 'stun:139.162.61.4:3478' },
+                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                //     // // Google STUN servers (fallback)
+                //     // { urls: 'stun:stun.l.google.com:19302' },
+                //     // { urls: 'stun:stun1.l.google.com:19302' },
+                //     // { urls: 'stun:stun2.l.google.com:19302' },
+                //     // { urls: 'stun:stun3.l.google.com:19302' },
+                //     // { urls: 'stun:stun4.l.google.com:19302' },
+
+                //     // // Additional STUN servers for better reliability
+                //     // { urls: 'stun:stun.services.mozilla.com' },
+                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                //     // // Public TURN servers (last resort)
+                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                // ],
                 iceServers: [
-                    // Local STUN/TURN servers (high priority)
-                    { urls: 'stun:139.162.61.4:3478' },
-                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-                    
-                    // // Google STUN servers (fallback)
-                    // { urls: 'stun:stun.l.google.com:19302' },
-                    // { urls: 'stun:stun1.l.google.com:19302' },
-                    // { urls: 'stun:stun2.l.google.com:19302' },
-                    // { urls: 'stun:stun3.l.google.com:19302' },
-                    // { urls: 'stun:stun4.l.google.com:19302' },
-                    
-                    // // Additional STUN servers for better reliability
-                    // { urls: 'stun:stun.services.mozilla.com' },
-                    // { urls: 'stun:stun.stunprotocol.org:3478' },
-                    
-                    // // Public TURN servers (last resort)
-                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    {
+                        urls: "stun:stun.relay.metered.ca:80",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:443",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
                 ],
                 iceCandidatePoolSize: 10
             });
@@ -661,8 +686,8 @@ class CCTVCamera {
                 console.log(`Connection state with ${viewerId}:`, peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     this.updateStatus('📡 Streaming to viewer', 'connected');
-                } else if (peerConnection.connectionState === 'disconnected' || 
-                          peerConnection.connectionState === 'failed') {
+                } else if (peerConnection.connectionState === 'disconnected' ||
+                    peerConnection.connectionState === 'failed') {
                     this.peerConnections.delete(viewerId);
                 }
             };
@@ -721,31 +746,31 @@ class CCTVCamera {
             // Use a more permissive approach for mobile devices
             let permissionStream = null;
             try {
-                permissionStream = await this.getUserMediaSafely({ 
-                    video: { 
+                permissionStream = await this.getUserMediaSafely({
+                    video: {
                         width: { ideal: 640 },
                         height: { ideal: 480 }
-                    }, 
-                    audio: true 
+                    },
+                    audio: true
                 });
                 console.log('Permission stream obtained');
-                
+
                 if (permissionStream) {
                     permissionStream.getTracks().forEach(track => track.stop());
                 }
             } catch (permError) {
                 console.log('Could not get permission stream, trying device enumeration anyway:', permError);
             }
-            
+
             // Wait a bit for devices to be properly enumerated on mobile
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             const devices = await navigator.mediaDevices.enumerateDevices();
             console.log('Raw device list:', devices);
-            
+
             this.availableDevices.video = devices.filter(device => device.kind === 'videoinput');
             this.availableDevices.audio = devices.filter(device => device.kind === 'audioinput');
-            
+
             console.log('Available video devices:', this.availableDevices.video.map(d => ({
                 id: d.deviceId,
                 label: d.label,
@@ -756,15 +781,15 @@ class CCTVCamera {
                 label: d.label,
                 groupId: d.groupId
             })));
-            
+
             // Special handling for mobile devices that might have multiple cameras
             if (this.deviceInfo && this.deviceInfo.isMobile) {
                 console.log('Mobile device detected, organizing cameras...');
                 this.organizeMobileCameras();
             }
-            
+
             this.populateDeviceSelectors();
-            
+
             // Try to extract hostname from device labels
             this.extractHostnameFromDevices();
         } catch (error) {
@@ -778,15 +803,15 @@ class CCTVCamera {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
         const isChrome = /Chrome/.test(userAgent);
         const isAndroid = /Android/.test(userAgent);
-        
+
         console.log(`Device info: Mobile: ${isMobile}, Chrome: ${isChrome}, Android: ${isAndroid}`);
         console.log(`Protocol: ${location.protocol}, Host: ${location.hostname}`);
-        
+
         // Show specific warnings for mobile users
         if (isMobile && location.protocol !== 'https:' && location.hostname !== 'localhost') {
             this.updateStatus('⚠️ Mobile devices require HTTPS for camera access', 'warning');
         }
-        
+
         this.deviceInfo = { isMobile, isChrome, isAndroid };
     }
 
@@ -796,7 +821,7 @@ class CCTVCamera {
             console.error('navigator.mediaDevices not supported');
             return false;
         }
-        
+
         // Check for getUserMedia support
         if (!navigator.mediaDevices.getUserMedia) {
             console.error('navigator.mediaDevices.getUserMedia not supported');
@@ -806,7 +831,7 @@ class CCTVCamera {
         // Check if we're on HTTPS (required for mobile Chrome)
         if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
             console.error('HTTPS required for camera access on this device');
-            
+
             // More specific message for mobile
             if (this.deviceInfo && this.deviceInfo.isMobile) {
                 return false;
@@ -827,7 +852,7 @@ class CCTVCamera {
             return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (error) {
             console.error('getUserMedia failed:', error);
-            
+
             // Try legacy getUserMedia as fallback
             try {
                 return await this.getLegacyUserMedia(constraints);
@@ -841,11 +866,11 @@ class CCTVCamera {
     getLegacyUserMedia(constraints) {
         return new Promise((resolve, reject) => {
             // Legacy getUserMedia support
-            const getUserMedia = navigator.getUserMedia || 
-                               navigator.webkitGetUserMedia || 
-                               navigator.mozGetUserMedia || 
-                               navigator.msGetUserMedia;
-            
+            const getUserMedia = navigator.getUserMedia ||
+                navigator.webkitGetUserMedia ||
+                navigator.mozGetUserMedia ||
+                navigator.msGetUserMedia;
+
             if (!getUserMedia) {
                 reject(new Error('No getUserMedia support found'));
                 return;
@@ -858,7 +883,7 @@ class CCTVCamera {
     disableCameraControls() {
         this.startBtn.disabled = true;
         this.startBtn.textContent = '❌ Camera Not Available';
-        
+
         // Show helpful error message
         this.updateStatus('📱 Camera access requires HTTPS on mobile devices. Please access via https:// or use desktop browser.', 'error');
     }
@@ -869,26 +894,26 @@ class CCTVCamera {
         this.availableDevices.video.sort((a, b) => {
             const aLabel = a.label.toLowerCase();
             const bLabel = b.label.toLowerCase();
-            
+
             // Back camera should come first
             if (aLabel.includes('back') && !bLabel.includes('back')) return -1;
             if (!aLabel.includes('back') && bLabel.includes('back')) return 1;
-            
+
             // Then front camera
             if (aLabel.includes('front') && !bLabel.includes('front')) return -1;
             if (!aLabel.includes('front') && bLabel.includes('front')) return 1;
-            
+
             // Otherwise keep original order
             return 0;
         });
-        
+
         console.log('Organized mobile cameras:', this.availableDevices.video.map(d => d.label));
     }
 
     extractHostnameFromDevices() {
         // Sometimes device labels contain system information we can use
         const allDevices = [...this.availableDevices.video, ...this.availableDevices.audio];
-        
+
         for (const device of allDevices) {
             if (device.label) {
                 console.log('Device label:', device.label);
@@ -901,16 +926,16 @@ class CCTVCamera {
     populateDeviceSelectors() {
         const videoSelect = document.getElementById('videoDeviceSelect');
         const audioSelect = document.getElementById('audioDeviceSelect');
-        
+
         if (videoSelect) {
             videoSelect.innerHTML = '<option value="">Select Camera...</option>';
             this.availableDevices.video.forEach((device, index) => {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
-                
+
                 // Better labeling for mobile devices
                 let label = device.label || `Camera ${index + 1}`;
-                
+
                 // Add helpful indicators for mobile cameras
                 if (this.deviceInfo && this.deviceInfo.isMobile) {
                     if (label.toLowerCase().includes('back')) {
@@ -921,12 +946,12 @@ class CCTVCamera {
                         label += ' (Primary)';
                     }
                 }
-                
+
                 option.textContent = label;
                 option.title = `Device ID: ${device.deviceId}`;
                 videoSelect.appendChild(option);
             });
-            
+
             // Select first device by default
             if (this.availableDevices.video.length > 0) {
                 const firstDevice = this.availableDevices.video[0];
@@ -935,7 +960,7 @@ class CCTVCamera {
                 console.log(`Default video device selected: ${firstDevice.label} (${firstDevice.deviceId})`);
             }
         }
-        
+
         if (audioSelect) {
             audioSelect.innerHTML = '<option value="">Select Microphone...</option>';
             this.availableDevices.audio.forEach((device, index) => {
@@ -945,7 +970,7 @@ class CCTVCamera {
                 option.title = `Device ID: ${device.deviceId}`;
                 audioSelect.appendChild(option);
             });
-            
+
             // Select first device by default
             if (this.availableDevices.audio.length > 0) {
                 const firstDevice = this.availableDevices.audio[0];
@@ -954,7 +979,7 @@ class CCTVCamera {
                 console.log(`Default audio device selected: ${firstDevice.label} (${firstDevice.deviceId})`);
             }
         }
-        
+
         // Log device selection summary
         console.log('Device selectors populated:', {
             videoDevices: this.availableDevices.video.length,
@@ -981,16 +1006,16 @@ class CCTVCamera {
         document.addEventListener('visibilitychange', () => {
             this.handleVisibilityChange();
         });
-        
+
         // Listen for page focus/blur events (additional fallback)
         window.addEventListener('focus', () => {
             this.handlePageFocus();
         });
-        
+
         window.addEventListener('blur', () => {
             this.handlePageBlur();
         });
-        
+
         // Listen for beforeunload to try to keep streaming
         window.addEventListener('beforeunload', (event) => {
             if (this.localStream && this.peerConnections.size > 0) {
@@ -1000,7 +1025,7 @@ class CCTVCamera {
                 return event.returnValue;
             }
         });
-        
+
         // Mobile-specific events
         if (this.deviceInfo && this.deviceInfo.isMobile) {
             // Listen for app state changes on mobile
@@ -1008,13 +1033,13 @@ class CCTVCamera {
                 console.log('App resumed, checking camera stream...');
                 this.handleAppResume();
             });
-            
+
             document.addEventListener('pause', () => {
                 console.log('App paused, enabling background mode...');
                 this.handleAppPause();
             });
         }
-        
+
         console.log('Background streaming support initialized');
     }
 
@@ -1045,7 +1070,7 @@ class CCTVCamera {
         console.log('Mobile app resumed');
         this.lastActivityTime = Date.now();
         this.disableBackgroundMode();
-        
+
         // Check if camera stream is still active
         if (this.localStream) {
             this.verifyStreamHealth();
@@ -1063,23 +1088,23 @@ class CCTVCamera {
         if (this.isBackgroundMode || !this.localStream) {
             return;
         }
-        
+
         console.log('🔄 Enabling enhanced background streaming mode...');
         this.isBackgroundMode = true;
-        
+
         // Update status to show background mode
         this.updateStatus('📱 Running in background - Camera active', 'connected');
-        
+
         // Set up keep-alive mechanism
         this.startBackgroundKeepAlive();
-        
+
         // Enhanced mobile browser support
         if (this.deviceInfo && this.deviceInfo.isMobile) {
             this.enableAggressiveBackgroundMode();
             // Create video keepalive system specifically for mobile
             this.createVideoKeepaliveCanvas();
         }
-        
+
         // Reduce video element updates to save resources
         if (this.localVideo) {
             this.localVideo.style.opacity = '0.3';
@@ -1087,10 +1112,10 @@ class CCTVCamera {
             this.localVideo.muted = true;
             this.localVideo.play().catch(e => console.log('Video play failed:', e));
         }
-        
+
         // Start stream monitoring
         this.startStreamMonitoring();
-        
+
         // Notify viewers about background mode
         if (this.socket) {
             this.socket.emit('camera-background-mode', {
@@ -1104,27 +1129,27 @@ class CCTVCamera {
         if (!this.isBackgroundMode) {
             return;
         }
-        
+
         console.log('🔄 Disabling background mode, returning to normal operation...');
         this.isBackgroundMode = false;
-        
+
         // Stop keep-alive
         this.stopBackgroundKeepAlive();
-        
+
         // Clean up aggressive background mode resources
         this.cleanupBackgroundMode();
-        
+
         // Restore video element
         if (this.localVideo) {
             this.localVideo.style.opacity = '1';
             this.localVideo.muted = false;
         }
-        
+
         // Update status
         if (this.localStream) {
             this.updateStatus('📺 Camera active - Normal mode', 'connected');
         }
-        
+
         // Notify viewers about normal mode
         if (this.socket) {
             this.socket.emit('camera-background-mode', {
@@ -1140,7 +1165,7 @@ class CCTVCamera {
             this.wakeLock.release().catch(e => console.log('Wake lock release failed:', e));
             this.wakeLock = null;
         }
-        
+
         // Clean up background canvas
         if (this.backgroundCanvas) {
             if (this.backgroundCanvas.parentNode) {
@@ -1148,7 +1173,7 @@ class CCTVCamera {
             }
             this.backgroundCanvas = null;
         }
-        
+
         // Clean up video keepalive elements
         if (this.keepaliveVideo) {
             if (this.keepaliveVideo.parentNode) {
@@ -1156,40 +1181,40 @@ class CCTVCamera {
             }
             this.keepaliveVideo = null;
         }
-        
+
         if (this.videoCanvas) {
             if (this.videoCanvas.parentNode) {
                 this.videoCanvas.parentNode.removeChild(this.videoCanvas);
             }
             this.videoCanvas = null;
         }
-        
+
         // Clear background intervals
         if (this.backgroundInterval) {
             clearInterval(this.backgroundInterval);
             this.backgroundInterval = null;
         }
-        
+
         if (this.streamTouchInterval) {
             clearInterval(this.streamTouchInterval);
             this.streamTouchInterval = null;
         }
-        
+
         if (this.streamMonitorInterval) {
             clearInterval(this.streamMonitorInterval);
             this.streamMonitorInterval = null;
         }
-        
+
         if (this.connectionMaintenanceInterval) {
             clearInterval(this.connectionMaintenanceInterval);
             this.connectionMaintenanceInterval = null;
         }
-        
+
         if (this.suspensionIntervals) {
             this.suspensionIntervals.forEach(interval => clearInterval(interval));
             this.suspensionIntervals = null;
         }
-        
+
         console.log('📱 Background mode cleanup completed');
     }
 
@@ -1197,9 +1222,9 @@ class CCTVCamera {
         if (this.backgroundKeepAlive) {
             return; // Already running
         }
-        
+
         console.log('Starting background keep-alive mechanism...');
-        
+
         // Send periodic signals to keep the connection alive
         this.backgroundKeepAlive = setInterval(() => {
             if (this.socket && this.localStream) {
@@ -1210,14 +1235,14 @@ class CCTVCamera {
                     streamActive: true,
                     backgroundMode: this.isBackgroundMode
                 });
-                
+
                 // Verify stream health
                 this.verifyStreamHealth();
-                
+
                 console.log('📡 Background keep-alive signal sent');
             }
         }, 5000); // Every 5 seconds
-        
+
         // Also try to prevent mobile browser from sleeping
         if (this.deviceInfo && this.deviceInfo.isMobile) {
             this.preventMobileSleep();
@@ -1236,12 +1261,12 @@ class CCTVCamera {
         if (!this.localStream) {
             return;
         }
-        
+
         const videoTracks = this.localStream.getVideoTracks();
         const audioTracks = this.localStream.getAudioTracks();
-        
+
         let streamHealthy = true;
-        
+
         // Check video tracks
         videoTracks.forEach(track => {
             if (track.readyState !== 'live') {
@@ -1249,7 +1274,7 @@ class CCTVCamera {
                 streamHealthy = false;
             }
         });
-        
+
         // Check audio tracks
         audioTracks.forEach(track => {
             if (track.readyState !== 'live') {
@@ -1257,7 +1282,7 @@ class CCTVCamera {
                 streamHealthy = false;
             }
         });
-        
+
         if (!streamHealthy) {
             console.error('Stream health check failed, attempting recovery...');
             this.attemptStreamRecovery();
@@ -1271,10 +1296,10 @@ class CCTVCamera {
             console.error('Cannot recover stream: no current video device');
             return;
         }
-        
+
         try {
             console.log('🔄 Attempting stream recovery in background...');
-            
+
             // Try to restart the stream with current devices
             const constraints = {
                 video: {
@@ -1286,21 +1311,21 @@ class CCTVCamera {
                     deviceId: { ideal: this.currentDevices.audio }
                 } : true
             };
-            
+
             const newStream = await this.getUserMediaSafely(constraints);
-            
+
             // Replace the stream
             const oldStream = this.localStream;
             this.localStream = newStream;
-            
+
             // Update video element
             this.localVideo.srcObject = newStream;
-            
+
             // Update peer connections
             this.peerConnections.forEach(async (peerConnection, viewerId) => {
                 const senders = peerConnection.getSenders();
                 const newTracks = newStream.getTracks();
-                
+
                 for (const newTrack of newTracks) {
                     const sender = senders.find(s => s.track && s.track.kind === newTrack.kind);
                     if (sender) {
@@ -1308,15 +1333,15 @@ class CCTVCamera {
                     }
                 }
             });
-            
+
             // Stop old stream
             if (oldStream) {
                 oldStream.getTracks().forEach(track => track.stop());
             }
-            
+
             console.log('✅ Stream recovery successful');
             this.updateStatus('🔄 Stream recovered in background', 'connected');
-            
+
         } catch (error) {
             console.error('❌ Stream recovery failed:', error);
             this.updateStatus('❌ Background stream recovery failed', 'error');
@@ -1330,25 +1355,25 @@ class CCTVCamera {
             console.warn('Cannot enable alerts: no active stream');
             return;
         }
-        
+
         console.log('🚨 Enabling security alert system...');
         this.alertsEnabled = true;
-        
+
         if (this.motionDetectionEnabled) {
             this.startMotionDetection();
         }
-        
+
         if (this.audioDetectionEnabled) {
             this.startAudioDetection();
         }
-        
+
         // Notify viewers that alerts are enabled
         this.socket.emit('security-alerts-status', {
             enabled: true,
             motionEnabled: this.motionDetectionEnabled,
             audioEnabled: this.audioDetectionEnabled
         });
-        
+
         this.updateStatus('🚨 Security alerts enabled', 'connected');
     }
 
@@ -1357,19 +1382,19 @@ class CCTVCamera {
         this.alertsEnabled = false;
         this.motionDetectionEnabled = false;
         this.audioDetectionEnabled = false;
-        
+
         this.stopMotionDetection();
         this.stopAudioDetection();
-        
+
         console.log('✅ Security alert system fully disabled - no more alerts will be sent');
-        
+
         // Notify viewers that alerts are disabled
         this.socket.emit('security-alerts-status', {
             enabled: false,
             motionEnabled: false,
             audioEnabled: false
         });
-        
+
         this.updateStatus('📴 Security alerts disabled', 'connected');
     }
 
@@ -1377,21 +1402,21 @@ class CCTVCamera {
         if (!this.localVideo || !this.alertsEnabled) {
             return;
         }
-        
+
         try {
             // Create motion detection canvas
             this.motionCanvas = document.createElement('canvas');
             this.motionCanvas.width = 160; // Smaller for performance
             this.motionCanvas.height = 120;
             this.motionContext = this.motionCanvas.getContext('2d');
-            
+
             console.log('👁️ Starting motion detection...');
-            
+
             // Analyze frames more frequently for better sensitivity (every 250ms)
             this.motionDetectionInterval = setInterval(() => {
                 this.analyzeMotion();
             }, 250);
-            
+
         } catch (error) {
             console.error('Motion detection setup failed:', error);
         }
@@ -1402,13 +1427,13 @@ class CCTVCamera {
             clearInterval(this.motionDetectionInterval);
             this.motionDetectionInterval = null;
         }
-        
+
         if (this.motionCanvas) {
             this.motionCanvas = null;
             this.motionContext = null;
             this.previousFrameData = null;
         }
-        
+
         console.log('👁️ Motion detection stopped');
     }
 
@@ -1417,40 +1442,40 @@ class CCTVCamera {
         if (!this.alertsEnabled || !this.motionDetectionEnabled) {
             return;
         }
-        
+
         if (!this.localVideo || this.localVideo.readyState !== 4) {
             return; // Video not ready
         }
-        
+
         try {
             // Draw current video frame to canvas
             this.motionContext.drawImage(this.localVideo, 0, 0, 160, 120);
             const currentFrameData = this.motionContext.getImageData(0, 0, 160, 120);
-            
+
             if (this.previousFrameData) {
                 // Calculate difference between frames
                 const diff = this.calculateFrameDifference(currentFrameData.data, this.previousFrameData.data);
-                
+
                 // Check if motion exceeds threshold
                 // Convert sensitivity to proper threshold: 0.1 = very sensitive (low threshold), 0.8 = less sensitive (high threshold)
                 // With improved algorithm, use sensitivity more directly but scaled appropriately
                 const threshold = this.motionSensitivity * 0.002; // Scale to 0.0002-0.0016 range for new algorithm
-                
+
                 console.log('🔍 Motion analysis:', {
                     diff: diff.toFixed(6),
                     sensitivity: this.motionSensitivity,
                     threshold: threshold.toFixed(6),
                     triggered: diff > threshold
                 });
-                
+
                 if (diff > threshold) {
                     this.onMotionDetected(diff);
                 }
             }
-            
+
             // Store current frame for next comparison
             this.previousFrameData = currentFrameData;
-            
+
         } catch (error) {
             console.error('Motion analysis failed:', error);
         }
@@ -1461,26 +1486,26 @@ class CCTVCamera {
         let significantPixels = 0;
         const pixels = current.length / 4; // RGBA = 4 values per pixel
         const changeThreshold = 15; // Minimum change per pixel to count as significant
-        
+
         for (let i = 0; i < pixels; i++) {
             const index = i * 4;
             // Calculate grayscale difference for performance
             const currentGray = (current[index] + current[index + 1] + current[index + 2]) / 3;
             const previousGray = (previous[index] + previous[index + 1] + previous[index + 2]) / 3;
-            
+
             const pixelDiff = Math.abs(currentGray - previousGray);
-            
+
             // Only count pixels with significant changes to reduce noise
             if (pixelDiff > changeThreshold) {
                 totalDiff += pixelDiff;
                 significantPixels++;
             }
         }
-        
+
         // Return percentage of significantly changed pixels
         const changeRatio = significantPixels / pixels;
         const avgIntensity = significantPixels > 0 ? (totalDiff / significantPixels) / 255 : 0;
-        
+
         // Combine change ratio and intensity for better detection
         return changeRatio * avgIntensity;
     }
@@ -1491,18 +1516,18 @@ class CCTVCamera {
             console.log('🚫 Motion detected but alerts are disabled - skipping alert');
             return;
         }
-        
+
         const now = Date.now();
-        
+
         // Check cooldown period
         if (now - this.lastMotionAlert < this.alertCooldown) {
             return; // Still in cooldown
         }
-        
+
         this.lastMotionAlert = now;
-        
+
         console.warn(`🚨 Motion detected! Intensity: ${intensity.toFixed(3)}`);
-        
+
         // Send alert to all viewers
         this.socket.emit('security-alert', {
             type: 'motion',
@@ -1511,7 +1536,7 @@ class CCTVCamera {
             message: `Motion detected - Intensity: ${Math.round(intensity * 100)}%`,
             cameraName: this.cameraNameInput.value || 'Unknown Camera'
         });
-        
+
         // Show local notification
         this.updateStatus(`🚨 Motion Alert - Intensity: ${Math.round(intensity * 100)}%`, 'warning');
         setTimeout(() => {
@@ -1525,34 +1550,34 @@ class CCTVCamera {
         if (!this.localStream || !this.alertsEnabled) {
             return;
         }
-        
+
         try {
             // Create audio context and analyser
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.audioAnalyser = this.audioContext.createAnalyser();
             this.audioAnalyser.fftSize = 256;
-            
+
             const bufferLength = this.audioAnalyser.frequencyBinCount;
             this.audioDataArray = new Uint8Array(bufferLength);
-            
+
             // Get audio track from stream
             const audioTracks = this.localStream.getAudioTracks();
             if (audioTracks.length === 0) {
                 console.warn('No audio track available for audio detection');
                 return;
             }
-            
+
             // Create audio source from stream
             const source = this.audioContext.createMediaStreamSource(this.localStream);
             source.connect(this.audioAnalyser);
-            
+
             console.log('🔊 Starting audio detection...');
-            
+
             // Analyze audio every 200ms
             this.audioDetectionInterval = setInterval(() => {
                 this.analyzeAudio();
             }, 200);
-            
+
         } catch (error) {
             console.error('Audio detection setup failed:', error);
         }
@@ -1563,15 +1588,15 @@ class CCTVCamera {
             clearInterval(this.audioDetectionInterval);
             this.audioDetectionInterval = null;
         }
-        
+
         if (this.audioContext) {
             this.audioContext.close();
             this.audioContext = null;
         }
-        
+
         this.audioAnalyser = null;
         this.audioDataArray = null;
-        
+
         console.log('🔊 Audio detection stopped');
     }
 
@@ -1580,27 +1605,27 @@ class CCTVCamera {
         if (!this.alertsEnabled || !this.audioDetectionEnabled) {
             return;
         }
-        
+
         if (!this.audioAnalyser) {
             return;
         }
-        
+
         try {
             // Get frequency data
             this.audioAnalyser.getByteFrequencyData(this.audioDataArray);
-            
+
             // Calculate average volume
             let sum = 0;
             for (let i = 0; i < this.audioDataArray.length; i++) {
                 sum += this.audioDataArray[i];
             }
             const averageVolume = sum / this.audioDataArray.length / 255; // Normalize to 0-1
-            
+
             // Check for volume spikes (suspicious sounds)
             if (averageVolume > this.audioSensitivity) {
                 this.onSuspiciousAudioDetected(averageVolume);
             }
-            
+
         } catch (error) {
             console.error('Audio analysis failed:', error);
         }
@@ -1612,18 +1637,18 @@ class CCTVCamera {
             console.log('🚫 Suspicious audio detected but alerts are disabled - skipping alert');
             return;
         }
-        
+
         const now = Date.now();
-        
+
         // Check cooldown period
         if (now - this.lastAudioAlert < this.alertCooldown) {
             return; // Still in cooldown
         }
-        
+
         this.lastAudioAlert = now;
-        
+
         console.warn(`🔊 Suspicious audio detected! Volume: ${volume.toFixed(3)}`);
-        
+
         // Send alert to all viewers
         this.socket.emit('security-alert', {
             type: 'audio',
@@ -1632,7 +1657,7 @@ class CCTVCamera {
             message: `Suspicious sound detected - Volume: ${Math.round(volume * 100)}%`,
             cameraName: this.cameraNameInput.value || 'Unknown Camera'
         });
-        
+
         // Show local notification
         this.updateStatus(`🔊 Audio Alert - Volume: ${Math.round(volume * 100)}%`, 'warning');
         setTimeout(() => {
@@ -1648,14 +1673,14 @@ class CCTVCamera {
         this.motionSensitivity = settings.motionSensitivity ?? this.motionSensitivity;
         this.audioSensitivity = settings.audioSensitivity ?? this.audioSensitivity;
         this.alertCooldown = settings.cooldownSeconds ? settings.cooldownSeconds * 1000 : this.alertCooldown;
-        
+
         // Only update alertsEnabled if the settings explicitly provide enabled/disabled states
         // This prevents auto-disabling when other settings are changed
         if (settings.hasOwnProperty('motionEnabled') || settings.hasOwnProperty('audioEnabled')) {
             const shouldEnable = this.motionDetectionEnabled || this.audioDetectionEnabled;
             const wasEnabled = this.alertsEnabled;
             this.alertsEnabled = shouldEnable;
-            
+
             console.log('🔄 Security alerts status change:', {
                 wasEnabled,
                 nowEnabled: this.alertsEnabled,
@@ -1668,7 +1693,7 @@ class CCTVCamera {
                 receivedSettings: settings
             });
         }
-        
+
         console.log('🔧 Alert settings updated:', {
             alertsEnabled: this.alertsEnabled,
             motion: this.motionDetectionEnabled,
@@ -1677,10 +1702,10 @@ class CCTVCamera {
             audioSensitivity: this.audioSensitivity,
             cooldown: this.alertCooldown / 1000 + 's'
         });
-        
+
         // Update UI elements to reflect new settings
         this.updateAlertSettingsUI();
-        
+
         // Show temporary notification
         this.updateStatus('🔧 Alert settings updated from viewer', 'connected');
         setTimeout(() => {
@@ -1688,16 +1713,16 @@ class CCTVCamera {
                 this.updateStatus('📹 Camera streaming - Security alerts active', 'connected');
             }
         }, 3000);
-        
+
         // Restart detection with new settings
         if (this.alertsEnabled) {
             this.stopMotionDetection();
             this.stopAudioDetection();
-            
+
             if (this.motionDetectionEnabled) {
                 this.startMotionDetection();
             }
-            
+
             if (this.audioDetectionEnabled) {
                 this.startAudioDetection();
             }
@@ -1717,7 +1742,7 @@ class CCTVCamera {
         if (enableAlertsCheckbox) {
             const shouldBeEnabled = this.motionDetectionEnabled || this.audioDetectionEnabled;
             const currentlyChecked = enableAlertsCheckbox.checked;
-            
+
             // Only update checkbox if there's a significant change needed
             if (shouldBeEnabled !== currentlyChecked) {
                 enableAlertsCheckbox.checked = shouldBeEnabled;
@@ -1725,7 +1750,7 @@ class CCTVCamera {
             } else {
                 console.log('⚡ Preserving main enableAlerts checkbox state:', currentlyChecked);
             }
-            
+
             // Show/hide the alert options panel based on the actual checkbox state
             const alertOptions = document.getElementById('alertOptions');
             if (alertOptions) {
@@ -1789,19 +1814,19 @@ class CCTVCamera {
 
     enableAggressiveBackgroundMode() {
         console.log('🚀 Enabling aggressive background mode for mobile...');
-        
+
         // Method 1: Enhanced Wake Lock
         this.requestWakeLock();
-        
+
         // Method 2: Create background canvas to keep GPU active
         this.createBackgroundCanvas();
-        
+
         // Method 3: Continuous stream touching
         this.startStreamTouching();
-        
+
         // Method 4: Prevent page suspension with intervals
         this.preventPageSuspension();
-        
+
         // Method 5: Keep WebRTC connections active
         this.maintainWebRTCConnections();
     }
@@ -1811,7 +1836,7 @@ class CCTVCamera {
             if ('wakeLock' in navigator) {
                 this.wakeLock = await navigator.wakeLock.request('screen');
                 console.log('📱 Screen wake lock acquired');
-                
+
                 this.wakeLock.addEventListener('release', () => {
                     console.log('📱 Screen wake lock released, attempting to reacquire...');
                     // Try to reacquire wake lock
@@ -1834,10 +1859,10 @@ class CCTVCamera {
             this.backgroundCanvas.style.position = 'fixed';
             this.backgroundCanvas.style.top = '-9999px';
             this.backgroundCanvas.style.opacity = '0';
-            
+
             const ctx = this.backgroundCanvas.getContext('2d');
             document.body.appendChild(this.backgroundCanvas);
-            
+
             // Continuously draw to keep canvas active
             let frame = 0;
             this.backgroundInterval = setInterval(() => {
@@ -1845,12 +1870,12 @@ class CCTVCamera {
                 ctx.fillRect(0, 0, 1, 1);
                 frame++;
             }, 100);
-            
+
             // Additional video-specific canvas for stream rendering
             if (this.deviceInfo?.isMobile && this.localStream) {
                 this.createVideoKeepaliveCanvas();
             }
-            
+
             console.log('📱 Background canvas created for GPU keep-alive');
         } catch (error) {
             console.log('Background canvas creation failed:', error);
@@ -1870,7 +1895,7 @@ class CCTVCamera {
             this.keepaliveVideo.muted = true;
             this.keepaliveVideo.autoplay = true;
             this.keepaliveVideo.playsInline = true;
-            
+
             // Create canvas to continuously render video frames
             this.videoCanvas = document.createElement('canvas');
             this.videoCanvas.width = 64;
@@ -1879,14 +1904,14 @@ class CCTVCamera {
             this.videoCanvas.style.top = '-9999px';
             this.videoCanvas.style.left = '-9999px';
             this.videoCanvas.style.opacity = '0';
-            
+
             const videoCtx = this.videoCanvas.getContext('2d');
             document.body.appendChild(this.keepaliveVideo);
             document.body.appendChild(this.videoCanvas);
-            
+
             // Set the stream to keepalive video
             this.keepaliveVideo.srcObject = this.localStream;
-            
+
             // Continuously render video frames to canvas
             const renderFrame = () => {
                 if (this.keepaliveVideo && !this.keepaliveVideo.paused && !this.keepaliveVideo.ended) {
@@ -1896,17 +1921,17 @@ class CCTVCamera {
                         // Ignore canvas drawing errors
                     }
                 }
-                
+
                 if (this.isBackgroundMode) {
                     requestAnimationFrame(renderFrame);
                 }
             };
-            
+
             this.keepaliveVideo.addEventListener('loadeddata', () => {
                 console.log('📱 Video keepalive canvas started rendering');
                 renderFrame();
             });
-            
+
             console.log('📱 Video keepalive system created');
         } catch (error) {
             console.log('Video keepalive creation failed:', error);
@@ -1925,7 +1950,7 @@ class CCTVCamera {
                         const settings = track.getSettings();
                         const constraints = track.getConstraints();
                         const capabilities = track.getCapabilities();
-                        
+
                         // Enhanced video track maintenance for mobile Chrome
                         if (this.isBackgroundMode && this.deviceInfo?.isMobile) {
                             // Force video track to stay active by accessing frame data
@@ -1941,14 +1966,14 @@ class CCTVCamera {
                                 console.log('Video track refresh failed:', e);
                             }
                         }
-                        
+
                         // Force track activity check
                         if (track.readyState !== 'live') {
                             console.warn('Video track not live, attempting recovery...');
                             this.attemptStreamRecovery();
                         }
                     });
-                    
+
                     // Touch audio tracks
                     const audioTracks = this.localStream.getAudioTracks();
                     audioTracks.forEach(track => {
@@ -1963,7 +1988,7 @@ class CCTVCamera {
                 }
             }
         };
-        
+
         // Touch stream every second
         this.streamTouchInterval = setInterval(touchStream, 1000);
         console.log('📱 Stream touching started');
@@ -1972,13 +1997,13 @@ class CCTVCamera {
     preventPageSuspension() {
         // Create multiple intervals to prevent page suspension
         const intervals = [];
-        
+
         // Interval 1: Keep JavaScript engine active
         intervals.push(setInterval(() => {
             const now = Date.now();
             this.lastActivityTime = now;
         }, 500));
-        
+
         // Interval 2: Touch DOM to keep rendering engine active
         intervals.push(setInterval(() => {
             if (document.body) {
@@ -1988,14 +2013,14 @@ class CCTVCamera {
                 }, 10);
             }
         }, 2000));
-        
+
         // Interval 3: Keep network active with tiny requests
         intervals.push(setInterval(() => {
             if (this.socket && this.socket.connected) {
                 this.socket.emit('ping', { timestamp: Date.now() });
             }
         }, 3000));
-        
+
         // Interval 4: Force video track activity (mobile-specific)
         if (this.deviceInfo?.isMobile) {
             intervals.push(setInterval(() => {
@@ -2019,7 +2044,7 @@ class CCTVCamera {
                 }
             }, 5000));
         }
-        
+
         this.suspensionIntervals = intervals;
         console.log('📱 Page suspension prevention started');
     }
@@ -2034,7 +2059,7 @@ class CCTVCamera {
                         console.log(`Peer connection ${viewerId} failed, attempting recovery...`);
                         // Don't immediately close, let automatic recovery handle it
                     }
-                    
+
                     // Generate stats to keep connection active
                     pc.getStats().then(stats => {
                         // Just accessing stats helps keep connection alive
@@ -2046,7 +2071,7 @@ class CCTVCamera {
                 }
             });
         };
-        
+
         this.connectionMaintenanceInterval = setInterval(maintainConnections, 2000);
         console.log('📱 WebRTC connection maintenance started');
     }
@@ -2055,24 +2080,24 @@ class CCTVCamera {
         // More aggressive stream monitoring for background mode
         this.lastFrameTime = Date.now();
         this.frameCount = 0;
-        
+
         this.streamMonitorInterval = setInterval(() => {
             this.verifyStreamHealth();
-            
+
             // Additional checks for background mode
             if (this.isBackgroundMode && this.localStream) {
                 const videoTracks = this.localStream.getVideoTracks();
                 const audioTracks = this.localStream.getAudioTracks();
-                
+
                 // Check if any tracks are muted or ended
                 let needsRecovery = false;
-                
+
                 videoTracks.forEach(track => {
                     if (track.readyState === 'ended' || track.muted) {
                         console.warn('Video track issue detected:', track.readyState, track.muted);
                         needsRecovery = true;
                     }
-                    
+
                     // Check video track settings to detect freezing
                     if (this.deviceInfo?.isMobile) {
                         const settings = track.getSettings();
@@ -2082,14 +2107,14 @@ class CCTVCamera {
                         }
                     }
                 });
-                
+
                 audioTracks.forEach(track => {
                     if (track.readyState === 'ended' || track.muted) {
                         console.warn('Audio track issue detected:', track.readyState, track.muted);
                         needsRecovery = true;
                     }
                 });
-                
+
                 // Monitor video frame updates using the keepalive video
                 if (this.keepaliveVideo && this.deviceInfo?.isMobile) {
                     const currentTime = this.keepaliveVideo.currentTime;
@@ -2105,14 +2130,14 @@ class CCTVCamera {
                     }
                     this.lastVideoTime = currentTime;
                 }
-                
+
                 if (needsRecovery) {
                     console.log('🔄 Background mode: Stream recovery needed');
                     this.attemptStreamRecovery();
                 }
             }
         }, 2000); // Check every 2 seconds in background mode
-        
+
         console.log('📱 Enhanced stream monitoring started');
     }
 
@@ -2129,14 +2154,14 @@ class CCTVCamera {
             keepAliveVideo.muted = true;
             keepAliveVideo.loop = true;
             keepAliveVideo.autoplay = true;
-            
+
             // Create a minimal video blob to keep playing
             const canvas = document.createElement('canvas');
             canvas.width = 1;
             canvas.height = 1;
             const stream = canvas.captureStream(1);
             keepAliveVideo.srcObject = stream;
-            
+
             document.body.appendChild(keepAliveVideo);
             console.log('📱 Mobile sleep prevention video created');
         } catch (error) {
@@ -2146,16 +2171,16 @@ class CCTVCamera {
 
     async fallbackCompleteStreamRestart(targetVideoDevice, targetAudioDevice) {
         console.log('Attempting fallback: complete stream restart');
-        
+
         try {
             // Stop current stream completely
             if (this.localStream) {
                 this.localStream.getTracks().forEach(track => track.stop());
             }
-            
+
             // Build new constraints with target devices
             const constraints = {};
-            
+
             if (targetVideoDevice) {
                 if (this.deviceInfo && this.deviceInfo.isMobile) {
                     // Mobile constraints (keep existing behavior)
@@ -2177,7 +2202,7 @@ class CCTVCamera {
             } else {
                 constraints.video = true;
             }
-            
+
             if (targetAudioDevice) {
                 constraints.audio = {
                     deviceId: { ideal: targetAudioDevice },
@@ -2188,22 +2213,22 @@ class CCTVCamera {
             } else {
                 constraints.audio = true;
             }
-            
+
             console.log('Fallback constraints:', constraints);
-            
+
             // Get completely new stream
             const newStream = await this.getUserMediaSafely(constraints);
-            
+
             // Replace in all peer connections
             const replacePromises = [];
             this.peerConnections.forEach((peerConnection, viewerId) => {
                 const senders = peerConnection.getSenders();
-                
+
                 newStream.getTracks().forEach(newTrack => {
-                    const sender = senders.find(s => 
+                    const sender = senders.find(s =>
                         s.track && s.track.kind === newTrack.kind
                     );
-                    
+
                     if (sender) {
                         replacePromises.push(
                             sender.replaceTrack(newTrack).catch(err => {
@@ -2214,28 +2239,28 @@ class CCTVCamera {
                     }
                 });
             });
-            
+
             await Promise.all(replacePromises);
-            
+
             // Update local stream and video
             this.localStream = newStream;
             this.localVideo.srcObject = this.localStream;
             this.showVideo();
-            
+
             // Update device tracking
             const videoTrack = newStream.getVideoTracks()[0];
             const audioTrack = newStream.getAudioTracks()[0];
-            
+
             if (videoTrack && targetVideoDevice) {
                 this.currentDevices.video = targetVideoDevice;
             }
             if (audioTrack && targetAudioDevice) {
                 this.currentDevices.audio = targetAudioDevice;
             }
-            
+
             console.log('Fallback stream restart successful');
             return true;
-            
+
         } catch (error) {
             console.error('Fallback stream restart failed:', error);
             throw error;
@@ -2244,10 +2269,10 @@ class CCTVCamera {
 
     async pcProgressiveFallback(type, deviceId) {
         console.log(`PC progressive fallback for ${type} device: ${deviceId}`);
-        
+
         // Progressive constraint attempts for PC devices only
         const constraintAttempts = [];
-        
+
         if (type === 'video') {
             constraintAttempts.push(
                 // Attempt 1: High quality
@@ -2271,73 +2296,73 @@ class CCTVCamera {
                 { audio: { deviceId: { ideal: deviceId } } }
             );
         }
-        
+
         let lastError = null;
-        
+
         for (let i = 0; i < constraintAttempts.length; i++) {
             try {
                 console.log(`PC fallback attempt ${i + 1}:`, constraintAttempts[i]);
-                
+
                 const tempStream = await navigator.mediaDevices.getUserMedia(constraintAttempts[i]);
                 const newTrack = tempStream.getTracks().find(track => track.kind === (type === 'video' ? 'video' : 'audio'));
-                
+
                 if (!newTrack) {
                     throw new Error(`No ${type} track in stream`);
                 }
-                
+
                 console.log(`PC fallback attempt ${i + 1} successful`);
-                
+
                 // Replace tracks in peer connections
                 const replacePromises = [];
                 this.peerConnections.forEach((peerConnection, viewerId) => {
                     const senders = peerConnection.getSenders();
                     const sender = senders.find(s => s.track && s.track.kind === newTrack.kind);
-                    
+
                     if (sender) {
                         replacePromises.push(sender.replaceTrack(newTrack));
                     }
                 });
-                
+
                 await Promise.all(replacePromises);
-                
+
                 // Update local stream
                 const oldTracks = this.localStream.getTracks();
                 const oldTrack = oldTracks.find(track => track.kind === newTrack.kind);
-                
+
                 if (oldTrack) {
                     oldTrack.stop();
                     this.localStream.removeTrack(oldTrack);
                 }
-                
+
                 this.localStream.addTrack(newTrack);
                 this.localVideo.srcObject = this.localStream;
                 this.showVideo();
-                
+
                 // Update device tracking
                 this.currentDevices[type] = deviceId;
-                
+
                 // Clean up temp stream
                 tempStream.getTracks().forEach(track => {
                     if (track !== newTrack) {
                         track.stop();
                     }
                 });
-                
+
                 console.log(`PC progressive fallback completed successfully on attempt ${i + 1}`);
                 return; // Success
-                
+
             } catch (error) {
                 console.log(`PC fallback attempt ${i + 1} failed:`, error.message);
                 lastError = error;
             }
         }
-        
+
         throw lastError || new Error('All PC fallback attempts failed');
     }
 
     async pcCameraSwitchFallback(deviceId) {
         console.log(`PC camera fallback for device: ${deviceId}`);
-        
+
         const attempts = [
             // Attempt 1: Exact deviceId with basic constraints
             {
@@ -2368,28 +2393,28 @@ class CCTVCamera {
                 video: true
             }
         ];
-        
+
         for (let i = 0; i < attempts.length; i++) {
             try {
                 console.log(`PC fallback attempt ${i + 1}:`, attempts[i]);
                 const stream = await navigator.mediaDevices.getUserMedia(attempts[i]);
-                
+
                 // Verify we got the right device (if possible)
                 const videoTrack = stream.getVideoTracks()[0];
                 if (videoTrack) {
                     const settings = videoTrack.getSettings();
                     console.log(`PC fallback attempt ${i + 1} success. Device: ${settings.deviceId}`);
-                    
+
                     // If this is the last attempt (default camera), warn user
                     if (i === attempts.length - 1) {
                         console.warn('Using default camera as fallback - requested device may not be available');
                     }
                 }
-                
+
                 return stream;
             } catch (error) {
                 console.log(`PC fallback attempt ${i + 1} failed:`, error.message);
-                
+
                 // If this is the last attempt, throw the error
                 if (i === attempts.length - 1) {
                     throw new Error(`All PC camera fallback attempts failed. Last error: ${error.message}`);
@@ -2402,20 +2427,20 @@ class CCTVCamera {
         if (!this.localStream) {
             throw new Error('No active camera stream to switch');
         }
-        
+
         try {
             console.log(`Switching ${type} device to:`, deviceId);
-            
+
             // Validate that the requested device exists
             const availableDevices = type === 'video' ? this.availableDevices.video : this.availableDevices.audio;
             const targetDevice = availableDevices.find(device => device.deviceId === deviceId);
-            
+
             if (!targetDevice) {
                 throw new Error(`${type} device with ID ${deviceId} not found`);
             }
-            
+
             console.log(`Target device found:`, targetDevice.label);
-            
+
             // Use a more targeted approach: only get a stream for the specific device type we're switching
             // This reduces camera access conflicts on mobile devices
             let newTrack = null;
@@ -2423,7 +2448,7 @@ class CCTVCamera {
             try {
                 // Build constraints only for the device type we're switching
                 const constraints = {};
-                
+
                 if (type === 'video') {
                     // Use different constraints for PC vs mobile devices
                     if (this.deviceInfo && this.deviceInfo.isMobile) {
@@ -2454,9 +2479,9 @@ class CCTVCamera {
                     };
                     // Don't request video - we'll keep the existing video track
                 }
-                
+
                 console.log('Targeted device switch constraints:', constraints);
-                
+
                 // Get stream with only the track we need to switch
                 if (type === 'video' && this.deviceInfo && !this.deviceInfo.isMobile) {
                     // For PC video devices, try our fallback approach first
@@ -2466,27 +2491,27 @@ class CCTVCamera {
                     // For mobile devices or audio, use the standard approach
                     tempStream = await this.getUserMediaSafely(constraints);
                 }
-                
+
                 // Get the new track of the type we're switching
                 const newTracks = tempStream.getTracks();
                 newTrack = newTracks.find(track => track.kind === (type === 'video' ? 'video' : 'audio'));
-                
+
                 if (!newTrack) {
                     throw new Error(`No ${type} track found in new stream`);
                 }
-                
+
                 console.log(`New ${type} track obtained:`, newTrack.getSettings());
-                
+
                 // Replace the track in all peer connections first
                 const replacePromises = [];
                 this.peerConnections.forEach((peerConnection, viewerId) => {
                     console.log(`Replacing ${type} track for viewer: ${viewerId}`);
                     const senders = peerConnection.getSenders();
-                    
-                    const sender = senders.find(s => 
+
+                    const sender = senders.find(s =>
                         s.track && s.track.kind === newTrack.kind
                     );
-                    
+
                     if (sender) {
                         console.log(`Replacing ${newTrack.kind} track for ${viewerId}`);
                         replacePromises.push(
@@ -2499,36 +2524,36 @@ class CCTVCamera {
                         console.log(`No sender found for ${newTrack.kind} track - this is unexpected`);
                     }
                 });
-                
+
                 // Wait for all track replacements to complete
                 await Promise.all(replacePromises);
-                
+
                 // Find and stop the old track of the same type in the local stream
                 const oldTracks = this.localStream.getTracks();
                 const oldTrack = oldTracks.find(track => track.kind === newTrack.kind);
-                
+
                 if (oldTrack) {
                     console.log(`Stopping old ${oldTrack.kind} track`);
                     oldTrack.stop();
-                    
+
                     // Remove old track from stream
                     this.localStream.removeTrack(oldTrack);
                 }
-                
+
                 // Add new track to local stream
                 this.localStream.addTrack(newTrack);
-                
+
                 // Update the video element source to refresh the stream
                 this.localVideo.srcObject = this.localStream;
                 this.showVideo(); // Ensure video is visible after switching
-                
+
                 // Update current device tracking
                 this.currentDevices[type] = deviceId;
-                
+
                 // Verify the switch was successful
                 const actualDeviceId = newTrack.getSettings()?.deviceId;
                 console.log(`Device switch completed. Requested: ${deviceId}, Actual: ${actualDeviceId}`);
-                
+
                 // Clean up temporary stream (but not the track we extracted)
                 if (tempStream) {
                     tempStream.getTracks().forEach(track => {
@@ -2537,31 +2562,31 @@ class CCTVCamera {
                         }
                     });
                 }
-                
+
                 this.updateStatus(`🔄 Switched ${type} device successfully`, 'connected');
-                
+
             } catch (streamError) {
                 // Clean up if something went wrong
                 if (tempStream) {
                     tempStream.getTracks().forEach(track => track.stop());
                 }
-                
+
                 // Try fallback approach: complete stream restart
                 console.log('Targeted switch failed, trying fallback approach:', streamError.message);
-                
+
                 try {
                     const fallbackVideoDevice = type === 'video' ? deviceId : this.currentDevices.video;
                     const fallbackAudioDevice = type === 'audio' ? deviceId : this.currentDevices.audio;
-                    
+
                     await this.fallbackCompleteStreamRestart(fallbackVideoDevice, fallbackAudioDevice);
-                    
+
                     console.log('Fallback device switch successful');
                     this.updateStatus(`🔄 Switched ${type} device successfully (fallback method)`, 'connected');
                     return; // Success via fallback
-                    
+
                 } catch (fallbackError) {
                     console.error('Both targeted and fallback switch methods failed:', fallbackError);
-                    
+
                     // For PC devices only, try one more progressive fallback approach
                     if (this.deviceInfo && !this.deviceInfo.isMobile) {
                         console.log('Attempting PC-specific progressive fallback...');
@@ -2574,16 +2599,16 @@ class CCTVCamera {
                             console.error('PC progressive fallback also failed:', pcFallbackError);
                         }
                     }
-                    
+
                     throw new Error(`Device switch failed: ${streamError.message}. All fallback methods failed.`);
                 }
             }
-            
+
         } catch (error) {
             console.error(`Error switching ${type} device:`, error);
-            
+
             let errorMessage = `Failed to switch ${type} device`;
-            
+
             // Provide specific error messages
             if (error.name === 'NotAllowedError') {
                 errorMessage += ': Permission denied. Please allow camera/microphone access.';
@@ -2598,7 +2623,7 @@ class CCTVCamera {
             } else if (error.message) {
                 errorMessage += `: ${error.message}`;
             }
-            
+
             this.updateStatus(`❌ ${errorMessage}`, 'error');
             throw error; // Re-throw for remote switching error handling
         }
@@ -2616,7 +2641,7 @@ class CCTVCamera {
             })),
             current: this.currentDevices
         };
-        
+
         this.socket.emit('device-list', {
             target: viewerId,
             devices: deviceList
@@ -2625,29 +2650,29 @@ class CCTVCamera {
 
     async handleRemoteDeviceSwitch(deviceType, deviceId, viewerId) {
         console.log(`Remote device switch requested: ${deviceType} to ${deviceId} from viewer ${viewerId}`);
-        
+
         let originalDeviceId = null;
         let rollbackRequired = false;
-        
+
         try {
             // Validate device type
             if (deviceType !== 'video' && deviceType !== 'audio') {
                 throw new Error(`Invalid device type: ${deviceType}`);
             }
-            
+
             // Check if we have an active stream
             if (!this.localStream) {
                 throw new Error('No active camera stream available for device switching');
             }
-            
+
             // Store original device ID for potential rollback
             originalDeviceId = this.currentDevices[deviceType];
             console.log(`Original ${deviceType} device: ${originalDeviceId}`);
-            
+
             // Check if we're already using the requested device
             if (originalDeviceId === deviceId) {
                 console.log(`Already using ${deviceType} device ${deviceId}, no switch needed`);
-                
+
                 // Send success response anyway
                 this.socket.emit('device-switched', {
                     target: viewerId,
@@ -2659,39 +2684,39 @@ class CCTVCamera {
                 });
                 return;
             }
-            
+
             // Validate that the target device is available
             await this.loadAvailableDevices(); // Refresh device list to ensure accuracy
-            
+
             const availableDevices = deviceType === 'video' ? this.availableDevices.video : this.availableDevices.audio;
             const targetDevice = availableDevices.find(device => device.deviceId === deviceId);
-            
+
             if (!targetDevice) {
                 throw new Error(`${deviceType} device with ID ${deviceId} is not available. Please refresh the device list.`);
             }
-            
+
             console.log(`Target ${deviceType} device found: ${targetDevice.label}`);
-            
+
             // Show switching status
             this.updateStatus(`🔄 Switching ${deviceType} device remotely to ${targetDevice.label}...`, 'warning');
-            
+
             // Update the device selectors in the UI to reflect the change
             const selector = document.getElementById(deviceType === 'video' ? 'videoDeviceSelect' : 'audioDeviceSelect');
             if (selector) {
                 selector.value = deviceId;
             }
-            
+
             // Mark that we've started the switch (for potential rollback)
             rollbackRequired = true;
-            
+
             // Add a small delay to prevent rapid switching conflicts
             await new Promise(resolve => setTimeout(resolve, 200));
-            
+
             // Perform the actual device switch with retry logic
             let switchAttempts = 0;
             const maxAttempts = 3;
             let lastError = null;
-            
+
             while (switchAttempts < maxAttempts) {
                 try {
                     console.log(`Attempting device switch (attempt ${switchAttempts + 1}/${maxAttempts})`);
@@ -2700,21 +2725,21 @@ class CCTVCamera {
                 } catch (attemptError) {
                     lastError = attemptError;
                     switchAttempts++;
-                    
+
                     if (switchAttempts < maxAttempts) {
                         console.log(`Switch attempt ${switchAttempts} failed, retrying in 500ms:`, attemptError.message);
                         await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 }
             }
-            
+
             // Check if all attempts failed
             if (switchAttempts === maxAttempts) {
                 throw lastError || new Error(`Failed to switch ${deviceType} device after ${maxAttempts} attempts`);
             }
-            
+
             console.log(`Remote ${deviceType} device switch successful after ${switchAttempts + 1} attempt(s)`);
-            
+
             // Send success confirmation to viewer
             this.socket.emit('device-switched', {
                 target: viewerId,
@@ -2724,22 +2749,22 @@ class CCTVCamera {
                 deviceLabel: targetDevice.label,
                 message: `Successfully switched ${deviceType} to ${targetDevice.label}`
             });
-            
+
         } catch (error) {
             console.error('Error in remote device switch:', error);
-            
+
             // Attempt rollback if we started the switch process
             if (rollbackRequired && originalDeviceId && originalDeviceId !== deviceId) {
                 console.log(`Attempting rollback to original ${deviceType} device: ${originalDeviceId}`);
                 try {
                     await this.switchDevice(deviceType, originalDeviceId);
-                    
+
                     // Update UI selector back to original
                     const selector = document.getElementById(deviceType === 'video' ? 'videoDeviceSelect' : 'audioDeviceSelect');
                     if (selector) {
                         selector.value = originalDeviceId;
                     }
-                    
+
                     console.log(`Rollback successful for ${deviceType} device`);
                     this.updateStatus(`⚠️ ${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} switch failed, reverted to original device`, 'warning');
                 } catch (rollbackError) {
@@ -2750,11 +2775,11 @@ class CCTVCamera {
                 // Show error on camera device
                 this.updateStatus(`❌ Remote ${deviceType} switch failed: ${error.message}`, 'error');
             }
-            
+
             // Determine error category for better user guidance
             let errorCategory = 'unknown';
             let userFriendlyMessage = error.message;
-            
+
             if (error.name === 'NotAllowedError' || error.message.includes('Permission')) {
                 errorCategory = 'permission';
                 userFriendlyMessage = 'Camera/microphone access was denied. Please check permissions.';
@@ -2768,7 +2793,7 @@ class CCTVCamera {
                 errorCategory = 'constraints';
                 userFriendlyMessage = 'The device does not support the required settings.';
             }
-            
+
             // Send detailed error information to viewer
             this.socket.emit('device-switched', {
                 target: viewerId,
@@ -2798,7 +2823,7 @@ class CCTVCamera {
     updateStatus(message, type) {
         this.status.textContent = message;
         this.status.className = `status ${type}`;
-        
+
         // Add mobile-specific help for camera issues
         if (type === 'error' && message.includes('Camera access')) {
             this.showMobileHelp();
@@ -2825,7 +2850,7 @@ class CCTVCamera {
                 </p>
             </div>
         `;
-        
+
         // Insert help after status element
         if (!document.querySelector('.mobile-help')) {
             this.status.parentNode.insertBefore(helpDiv, this.status.nextSibling);
@@ -2840,27 +2865,52 @@ class CCTVCamera {
 
             // Create peer connection for receiving audio
             const speakPeerConnection = new RTCPeerConnection({
+                // iceServers: [
+                //     // Local STUN/TURN servers (high priority)
+                //     { urls: 'stun:139.162.61.4:3478' },
+                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                //     // // Google STUN servers (fallback)
+                //     // { urls: 'stun:stun.l.google.com:19302' },
+                //     // { urls: 'stun:stun1.l.google.com:19302' },
+                //     // { urls: 'stun:stun2.l.google.com:19302' },
+                //     // { urls: 'stun:stun3.l.google.com:19302' },
+                //     // { urls: 'stun:stun4.l.google.com:19302' },
+
+                //     // // Additional STUN servers for better reliability
+                //     // { urls: 'stun:stun.services.mozilla.com' },
+                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                //     // // Public TURN servers (last resort)
+                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                // ],
                 iceServers: [
-                    // Local STUN/TURN servers (high priority)
-                    { urls: 'stun:139.162.61.4:3478' },
-                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-                    
-                    // // Google STUN servers (fallback)
-                    // { urls: 'stun:stun.l.google.com:19302' },
-                    // { urls: 'stun:stun1.l.google.com:19302' },
-                    // { urls: 'stun:stun2.l.google.com:19302' },
-                    // { urls: 'stun:stun3.l.google.com:19302' },
-                    // { urls: 'stun:stun4.l.google.com:19302' },
-                    
-                    // // Additional STUN servers for better reliability
-                    // { urls: 'stun:stun.services.mozilla.com' },
-                    // { urls: 'stun:stun.stunprotocol.org:3478' },
-                    
-                    // // Public TURN servers (last resort)
-                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    {
+                        urls: "stun:stun.relay.metered.ca:80",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:443",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
                 ],
                 iceCandidatePoolSize: 10
             });
@@ -2886,11 +2936,11 @@ class CCTVCamera {
             // Handle connection state changes
             speakPeerConnection.onconnectionstatechange = () => {
                 console.log(`🎤 Speak connection state with ${viewerId}:`, speakPeerConnection.connectionState);
-                
+
                 if (speakPeerConnection.connectionState === 'connected') {
                     this.updateStatus('🎤 Viewer is speaking', 'connected');
-                } else if (speakPeerConnection.connectionState === 'disconnected' || 
-                          speakPeerConnection.connectionState === 'failed') {
+                } else if (speakPeerConnection.connectionState === 'disconnected' ||
+                    speakPeerConnection.connectionState === 'failed') {
                     this.stopReceivingSpeech(viewerId);
                 }
             };
@@ -3006,7 +3056,7 @@ class CCTVCamera {
                 display: none;
                 animation: pulse 1.5s infinite;
             `;
-            
+
             // Add CSS animation
             const style = document.createElement('style');
             style.textContent = `
@@ -3016,7 +3066,7 @@ class CCTVCamera {
                 }
             `;
             document.head.appendChild(style);
-            
+
             document.body.appendChild(indicator);
         }
 

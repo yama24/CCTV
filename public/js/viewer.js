@@ -13,13 +13,13 @@ class CCTVViewer {
         this.remoteVideoSelect = document.getElementById('remoteVideoSelect');
         this.remoteAudioSelect = document.getElementById('remoteAudioSelect');
         this.refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
-        
+
         // Speak mode elements
         this.speakControls = document.getElementById('speakControls');
         this.startSpeakBtn = document.getElementById('startSpeakBtn');
         this.stopSpeakBtn = document.getElementById('stopSpeakBtn');
         this.speakStatus = document.getElementById('speakStatus');
-        
+
         this.peerConnection = null;
         this.currentCamera = null;
         this.availableCameras = [];
@@ -27,14 +27,14 @@ class CCTVViewer {
         this.isConnected = false;
         this.isConnecting = false;
         this.currentAlertSettings = null;
-        
+
         // Speak mode properties
         this.speakStream = null;
         this.isSpeaking = false;
         this.speakPeerConnection = null;
-        
+
         this.initializeEventListeners();
-        
+
         // Initialize authentication and socket connection
         this.initializeAuthentication();
     }
@@ -44,20 +44,20 @@ class CCTVViewer {
         const alertControls = document.getElementById('alertControls');
         const securityActivation = document.getElementById('securityActivation');
         const viewingInfo = document.getElementById('viewingInfo');
-        
+
         if (this.currentCamera) {
             // Show security activation panel
             if (securityActivation) {
                 securityActivation.style.display = 'block';
                 console.log('🛡️ Security activation panel made visible for camera:', this.currentCamera?.name);
             }
-            
+
             // Show alert controls
             if (alertControls) {
                 alertControls.style.display = 'block';
                 console.log('🚨 Alert controls made visible for camera:', this.currentCamera?.name);
             }
-            
+
             // Also ensure viewingInfo is visible
             if (viewingInfo) {
                 viewingInfo.style.display = 'block';
@@ -74,30 +74,30 @@ class CCTVViewer {
             const response = await fetch('/api/auth/token', {
                 credentials: 'include'
             });
-            
+
             if (!response.ok) {
                 throw new Error('Failed to get authentication token');
             }
-            
+
             const data = await response.json();
             this.authToken = data.token;
-            
+
             // Initialize socket connection with authentication
             this.socket = io({
                 auth: {
                     token: this.authToken
                 }
             });
-            
+
             this.initializeSocketListeners();
             this.loadCameras();
-            
+
             // Load user information and setup UI
             this.loadUserInfo();
-            
+
             // Set up periodic token validation (every 5 minutes)
             setInterval(() => this.validateToken(), 5 * 60 * 1000);
-            
+
         } catch (error) {
             console.error('Authentication failed:', error);
             alert('Authentication failed. Please log in again.');
@@ -110,7 +110,7 @@ class CCTVViewer {
             const response = await fetch('/api/auth/user', {
                 credentials: 'include'
             });
-            
+
             if (response.ok) {
                 const user = await response.json();
                 this.displayUserInfo(user);
@@ -158,16 +158,16 @@ class CCTVViewer {
                     'Authorization': `Bearer ${this.authToken}`
                 }
             });
-            
+
             if (!response.ok) {
                 throw new Error('Token validation failed');
             }
-            
+
             const result = await response.json();
             if (!result.valid) {
                 throw new Error('Token is no longer valid');
             }
-            
+
         } catch (error) {
             console.error('Token validation failed:', error);
             alert('Your session has expired. Please log in again.');
@@ -179,26 +179,26 @@ class CCTVViewer {
         this.disconnectBtn.addEventListener('click', () => this.disconnect());
         this.refreshBtn.addEventListener('click', () => this.loadCameras());
         this.refreshDevicesBtn.addEventListener('click', () => this.requestRemoteDeviceList());
-        
+
         // Security activation controls
         const activateSecurityBtn = document.getElementById('activateSecurityBtn');
         const deactivateSecurityBtn = document.getElementById('deactivateSecurityBtn');
         const configureAlertSettingsBtn = document.getElementById('configureAlertSettingsBtn');
-        
+
         if (activateSecurityBtn) {
             activateSecurityBtn.addEventListener('click', () => {
                 console.log('🚀 Security Activation button clicked!');
                 this.activateSecurityAlerts();
             });
         }
-        
+
         if (deactivateSecurityBtn) {
             deactivateSecurityBtn.addEventListener('click', () => {
                 console.log('⏹️ Security Deactivation button clicked!');
                 this.deactivateSecurityAlerts();
             });
         }
-        
+
         if (configureAlertSettingsBtn) {
             configureAlertSettingsBtn.addEventListener('click', () => {
                 console.log('⚙️ Configure Alert Settings button clicked!');
@@ -209,11 +209,11 @@ class CCTVViewer {
         // Alert controls
         const clearAlertsBtn = document.getElementById('clearAlertsBtn');
         const showAlertSettingsBtn = document.getElementById('showAlertSettingsBtn');
-        
+
         if (clearAlertsBtn) {
             clearAlertsBtn.addEventListener('click', () => this.clearAlertHistory());
         }
-        
+
         if (showAlertSettingsBtn) {
             showAlertSettingsBtn.addEventListener('click', () => {
                 console.log('⚙️ Alert Settings button clicked!');
@@ -222,13 +222,13 @@ class CCTVViewer {
         } else {
             console.error('❌ showAlertSettingsBtn element not found!');
         }
-        
+
         this.remoteVideoSelect.addEventListener('change', (e) => {
             if (e.target.value && this.isConnected) {
                 this.requestDeviceSwitch('video', e.target.value);
             }
         });
-        
+
         this.remoteAudioSelect.addEventListener('change', (e) => {
             if (e.target.value && this.isConnected) {
                 this.requestDeviceSwitch('audio', e.target.value);
@@ -239,7 +239,7 @@ class CCTVViewer {
         if (this.startSpeakBtn) {
             this.startSpeakBtn.addEventListener('click', () => this.startSpeakMode());
         }
-        
+
         if (this.stopSpeakBtn) {
             this.stopSpeakBtn.addEventListener('click', () => this.stopSpeakMode());
         }
@@ -380,7 +380,7 @@ class CCTVViewer {
         this.socket.on('current-alert-settings', (settings) => {
             console.log('📋 Received current alert settings:', settings);
             this.currentAlertSettings = settings;
-            
+
             // Update activation UI based on received settings
             const isActive = settings.motionEnabled || settings.audioEnabled;
             this.updateSecurityActivationUI(isActive);
@@ -416,7 +416,7 @@ class CCTVViewer {
                 },
                 credentials: 'include'
             });
-            
+
             if (!response.ok) {
                 if (response.status === 401) {
                     alert('Authentication failed. Please log in again.');
@@ -425,7 +425,7 @@ class CCTVViewer {
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            
+
             const cameras = await response.json();
             this.availableCameras = cameras;
             this.renderCameraList();
@@ -437,10 +437,10 @@ class CCTVViewer {
 
     renderCameraList() {
         if (this.availableCameras.length === 0) {
-            const message = this.currentUser && this.currentUser.role === 'admin' 
+            const message = this.currentUser && this.currentUser.role === 'admin'
                 ? 'No cameras currently active in the system'
                 : 'You have no active cameras';
-            
+
             this.cameraList.innerHTML = `
                 <div class="info">
                     📵 ${message}<br>
@@ -456,11 +456,11 @@ class CCTVViewer {
         this.cameraList.innerHTML = this.availableCameras.map(camera => {
             const isViewing = this.currentCamera?.roomId === camera.roomId && this.isConnected;
             const isConnecting = this.currentCamera?.roomId === camera.roomId && this.isConnecting;
-            
+
             let statusClass = 'available';
             let statusIcon = '🟢';
             let statusText = 'LIVE - Click to view';
-            
+
             if (isViewing) {
                 statusClass = 'viewing';
                 statusIcon = '📺';
@@ -470,7 +470,7 @@ class CCTVViewer {
                 statusIcon = '🔄';
                 statusText = 'CONNECTING...';
             }
-            
+
             return `
                 <div class="camera-item ${statusClass}" data-room-id="${camera.roomId}">
                     <div class="camera-name">📹 ${camera.name}</div>
@@ -517,18 +517,18 @@ class CCTVViewer {
         this.currentCameraName.textContent = camera.name;
         this.viewingInfo.style.display = 'block';
         this.hideVideo(); // Hide video until stream is received
-        
+
         // Show alert controls immediately when connecting
         this.ensureAlertControlsVisible();
-        
+
         // Show speak controls when connected to a camera
         if (this.speakControls) {
             this.speakControls.style.display = 'block';
         }
-        
+
         this.renderCameraList(); // Update visual state
         this.updateStatus(`🔄 Connecting to ${camera.name}...`, 'disconnected');
-        
+
         // Join the room as a viewer
         this.socket.emit('join-room', {
             roomId: camera.roomId,
@@ -542,7 +542,7 @@ class CCTVViewer {
             this.requestRemoteDeviceList();
             // Request current alert settings
             this.requestCurrentAlertSettings();
-            
+
             // Backup check to ensure alert controls are visible
             setTimeout(() => {
                 this.ensureAlertControlsVisible();
@@ -556,27 +556,52 @@ class CCTVViewer {
 
             // Create peer connection with enhanced ICE servers for better connectivity
             this.peerConnection = new RTCPeerConnection({
+                // iceServers: [
+                //     // Local STUN/TURN servers (high priority)
+                //     { urls: 'stun:139.162.61.4:3478' },
+                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                //     // // Google STUN servers (fallback)
+                //     // { urls: 'stun:stun.l.google.com:19302' },
+                //     // { urls: 'stun:stun1.l.google.com:19302' },
+                //     // { urls: 'stun:stun2.l.google.com:19302' },
+                //     // { urls: 'stun:stun3.l.google.com:19302' },
+                //     // { urls: 'stun:stun4.l.google.com:19302' },
+
+                //     // // Additional STUN servers for better reliability
+                //     // { urls: 'stun:stun.services.mozilla.com' },
+                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                //     // // Public TURN servers (last resort)
+                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                // ],
                 iceServers: [
-                    // Local STUN/TURN servers (high priority)
-                    { urls: 'stun:139.162.61.4:3478' },
-                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-                    
-                    // // Google STUN servers (fallback)
-                    // { urls: 'stun:stun.l.google.com:19302' },
-                    // { urls: 'stun:stun1.l.google.com:19302' },
-                    // { urls: 'stun:stun2.l.google.com:19302' },
-                    // { urls: 'stun:stun3.l.google.com:19302' },
-                    // { urls: 'stun:stun4.l.google.com:19302' },
-                    
-                    // // Additional STUN servers for better reliability
-                    // { urls: 'stun:stun.services.mozilla.com' },
-                    // { urls: 'stun:stun.stunprotocol.org:3478' },
-                    
-                    // // Public TURN servers (last resort)
-                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    {
+                        urls: "stun:stun.relay.metered.ca:80",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:443",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
                 ],
                 iceCandidatePoolSize: 10
             });
@@ -590,7 +615,7 @@ class CCTVViewer {
                 this.isConnecting = false;
                 this.renderCameraList(); // Update visual state
                 this.updateStatus(`📺 Viewing: ${this.currentCamera.name}`, 'connected');
-                
+
                 // Ensure alert controls are visible now that we're connected
                 this.ensureAlertControlsVisible();
             };
@@ -608,13 +633,13 @@ class CCTVViewer {
             // Handle connection state changes
             this.peerConnection.onconnectionstatechange = () => {
                 console.log('Connection state:', this.peerConnection.connectionState);
-                
+
                 switch (this.peerConnection.connectionState) {
                     case 'connected':
                         this.isConnected = true;
                         this.isConnecting = false;
                         this.updateStatus(`📺 Viewing: ${this.currentCamera.name}`, 'connected');
-                        
+
                         // Ensure alert controls are visible now that we're connected
                         this.ensureAlertControlsVisible();
                         break;
@@ -667,7 +692,7 @@ class CCTVViewer {
         if (this.isSpeaking) {
             this.stopSpeakMode();
         }
-        
+
         if (this.peerConnection) {
             this.peerConnection.close();
             this.peerConnection = null;
@@ -677,18 +702,18 @@ class CCTVViewer {
         this.isConnected = false;
         this.isConnecting = false;
         this.currentCamera = null;
-        
+
         this.viewingInfo.style.display = 'none';
         this.videoPlaceholder.style.display = 'flex';
-        
+
         // Hide alert controls when disconnecting
         const alertControls = document.getElementById('alertControls');
         const securityActivation = document.getElementById('securityActivation');
-        
+
         if (alertControls) {
             alertControls.style.display = 'none';
         }
-        
+
         if (securityActivation) {
             securityActivation.style.display = 'none';
         }
@@ -697,7 +722,7 @@ class CCTVViewer {
         if (this.speakControls) {
             this.speakControls.style.display = 'none';
         }
-        
+
         this.renderCameraList();
         this.updateStatus('📱 Click any camera to start viewing', 'connected');
     }
@@ -720,7 +745,7 @@ class CCTVViewer {
 
     updateRemoteDeviceList(devices) {
         this.remoteDevices = devices;
-        
+
         // Update video device selector
         this.remoteVideoSelect.innerHTML = '<option value="">Select Camera...</option>';
         devices.video.forEach(device => {
@@ -732,7 +757,7 @@ class CCTVViewer {
             }
             this.remoteVideoSelect.appendChild(option);
         });
-        
+
         // Update audio device selector
         this.remoteAudioSelect.innerHTML = '<option value="">Select Microphone...</option>';
         devices.audio.forEach(device => {
@@ -776,7 +801,7 @@ class CCTVViewer {
 
     showBackgroundModeIndicator(show) {
         let indicator = document.getElementById('backgroundModeIndicator');
-        
+
         if (show && !indicator) {
             // Create background mode indicator
             indicator = document.createElement('div');
@@ -815,7 +840,7 @@ class CCTVViewer {
 
     updateLastActivity() {
         let activityIndicator = document.getElementById('lastActivityIndicator');
-        
+
         if (!activityIndicator) {
             activityIndicator = document.createElement('div');
             activityIndicator.id = 'lastActivityIndicator';
@@ -833,10 +858,10 @@ class CCTVViewer {
             `;
             document.body.appendChild(activityIndicator);
         }
-        
+
         const now = new Date();
         activityIndicator.textContent = `📡 Last signal: ${now.toLocaleTimeString()}`;
-        
+
         // Auto-hide after 3 seconds
         setTimeout(() => {
             if (activityIndicator) {
@@ -854,7 +879,7 @@ class CCTVViewer {
         this.alertCooldowns = new Map(); // Prevent alert spam
         this.maxAlertHistory = 50;
         this.alertCooldownTime = 5000; // 5 seconds between same type alerts
-        
+
         console.log('🛡️ Security alert system initialized');
     }
 
@@ -863,7 +888,7 @@ class CCTVViewer {
             // Check if this alert type is in cooldown to prevent spam
             const alertKey = `${alertData.type}_${alertData.roomId}`;
             const now = Date.now();
-            
+
             if (this.alertCooldowns.has(alertKey)) {
                 const lastAlert = this.alertCooldowns.get(alertKey);
                 if (now - lastAlert < this.alertCooldownTime) {
@@ -871,32 +896,32 @@ class CCTVViewer {
                     return;
                 }
             }
-            
+
             // Set new cooldown
             this.alertCooldowns.set(alertKey, now);
-            
+
             // Add to alert history
             this.alertHistory.unshift({
                 ...alertData,
                 viewerTimestamp: now
             });
-            
+
             // Limit history size
             if (this.alertHistory.length > this.maxAlertHistory) {
                 this.alertHistory = this.alertHistory.slice(0, this.maxAlertHistory);
             }
-            
+
             // Show the alert notification
             this.showSecurityAlertNotification(alertData);
-            
+
             // Play alert sound
             this.playAlertSound(alertData.type);
-            
+
             // Update UI with alert indicator
             this.updateAlertIndicator(alertData);
-            
+
             console.log(`🚨 Security alert processed: ${alertData.type} from ${alertData.cameraName}`);
-            
+
         } catch (error) {
             console.error('Error handling security alert:', error);
         }
@@ -906,10 +931,10 @@ class CCTVViewer {
         // Create alert notification element
         const notification = document.createElement('div');
         notification.className = 'security-alert-notification';
-        
+
         const alertEmoji = alertData.type === 'motion' ? '👁️' : '🔊';
         const alertColor = alertData.type === 'motion' ? '#ff6b35' : '#ffd700';
-        
+
         notification.innerHTML = `
             <div style="
                 position: fixed;
@@ -950,9 +975,9 @@ class CCTVViewer {
                 }
             </style>
         `;
-        
+
         document.body.appendChild(notification);
-        
+
         // Auto-remove notification after 8 seconds
         setTimeout(() => {
             if (notification.parentNode) {
@@ -973,48 +998,48 @@ class CCTVViewer {
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
-            
+
             // Generate different tones for different alert types
             const frequency = alertType === 'motion' ? 800 : 600;
             const duration = 0.2;
-            
+
             const oscillator = this.audioContext.createOscillator();
             const gainNode = this.audioContext.createGain();
-            
+
             oscillator.connect(gainNode);
             gainNode.connect(this.audioContext.destination);
-            
+
             oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
             oscillator.type = 'sine';
-            
+
             gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
             gainNode.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
             gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
-            
+
             oscillator.start(this.audioContext.currentTime);
             oscillator.stop(this.audioContext.currentTime + duration);
-            
+
             // Double beep for motion alerts
             if (alertType === 'motion') {
                 setTimeout(() => {
                     const oscillator2 = this.audioContext.createOscillator();
                     const gainNode2 = this.audioContext.createGain();
-                    
+
                     oscillator2.connect(gainNode2);
                     gainNode2.connect(this.audioContext.destination);
-                    
+
                     oscillator2.frequency.setValueAtTime(frequency + 200, this.audioContext.currentTime);
                     oscillator2.type = 'sine';
-                    
+
                     gainNode2.gain.setValueAtTime(0, this.audioContext.currentTime);
                     gainNode2.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
                     gainNode2.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
-                    
+
                     oscillator2.start(this.audioContext.currentTime);
                     oscillator2.stop(this.audioContext.currentTime + duration);
                 }, 300);
             }
-            
+
         } catch (error) {
             console.log('Alert sound failed:', error);
         }
@@ -1024,24 +1049,24 @@ class CCTVViewer {
         // Update status bar with alert info
         const originalStatus = this.status.textContent;
         const alertEmoji = alertData.type === 'motion' ? '👁️' : '🔊';
-        
+
         this.updateStatus(`🚨 ${alertEmoji} ${alertData.type.toUpperCase()} ALERT - ${alertData.cameraName}`, 'warning');
-        
+
         // Revert to original status after 5 seconds
         setTimeout(() => {
             if (this.status.textContent.includes('ALERT')) {
                 this.updateStatus(originalStatus, this.isConnected ? 'connected' : 'disconnected');
             }
         }, 5000);
-        
+
         // Flash the video border for visual alert
         if (this.remoteVideo && this.isConnected) {
             const originalBorder = this.remoteVideo.style.border;
             const alertColor = alertData.type === 'motion' ? '#ff6b35' : '#ffd700';
-            
+
             this.remoteVideo.style.border = `3px solid ${alertColor}`;
             this.remoteVideo.style.boxShadow = `0 0 20px ${alertColor}`;
-            
+
             setTimeout(() => {
                 this.remoteVideo.style.border = originalBorder;
                 this.remoteVideo.style.boxShadow = '';
@@ -1051,16 +1076,16 @@ class CCTVViewer {
 
     updateSecurityAlertsStatus(statusData) {
         this.securityAlertsEnabled = statusData.enabled;
-        
+
         // Always show alert controls when connected to camera so user can enable/disable alerts
         this.ensureAlertControlsVisible();
-        
+
         // Update activation UI based on current status
         this.updateSecurityActivationUI(statusData.enabled);
-        
+
         // Update UI to show alert status
         let alertStatusIndicator = document.getElementById('alertStatusIndicator');
-        
+
         if (statusData.enabled && !alertStatusIndicator) {
             alertStatusIndicator = document.createElement('div');
             alertStatusIndicator.id = 'alertStatusIndicator';
@@ -1108,7 +1133,7 @@ class CCTVViewer {
                 </div>
             `;
         }
-        
+
         console.log(`🛡️ Security alerts ${statusData.enabled ? 'enabled' : 'disabled'} for this camera`);
     }
 
@@ -1121,14 +1146,14 @@ class CCTVViewer {
             Message: alert.message,
             Intensity: alert.intensity || alert.volume || 'N/A'
         })));
-        
+
         return this.alertHistory;
     }
 
     // Method to send alert settings to camera
     updateCameraAlertSettings(settings) {
         console.log('📤 updateCameraAlertSettings called - socket:', !!this.socket, 'isConnected:', this.isConnected, 'currentCamera:', !!this.currentCamera);
-        
+
         if (this.socket && this.currentCamera) {
             this.socket.emit('update-alert-settings', {
                 ...settings,
@@ -1161,7 +1186,7 @@ class CCTVViewer {
             const time = new Date(alert.timestamp).toLocaleTimeString();
             const emoji = alert.type === 'motion' ? '👁️' : '🔊';
             const intensity = alert.intensity || alert.volume || 'N/A';
-            
+
             return `
                 <div class="alert-item">
                     <div class="alert-header">
@@ -1179,10 +1204,10 @@ class CCTVViewer {
 
     showAlertSettings() {
         console.log('🔧 showAlertSettings called - isConnected:', this.isConnected, 'currentCamera:', this.currentCamera);
-        
+
         // Ensure alert controls are visible before showing dialog
         this.ensureAlertControlsVisible();
-        
+
         if (!this.currentCamera) {
             alert('Please connect to a camera first');
             return;
@@ -1278,9 +1303,9 @@ class CCTVViewer {
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(settingsDialog);
-        
+
         // Add real-time value updates for sliders
         const motionSlider = document.getElementById('dialogMotionSensitivity');
         const audioSlider = document.getElementById('dialogAudioSensitivity');
@@ -1298,18 +1323,18 @@ class CCTVViewer {
                 audioValue.textContent = e.target.value;
             });
         }
-        
+
         // Store instance reference for the onclick handler
         if (!CCTVViewer.instance) {
             CCTVViewer.instance = this;
         }
-        
+
         // Add debug method to window for testing
         window.debugActivateAlerts = () => {
             console.log('🔍 Debug activation test');
             this.activateSecurityAlerts();
         };
-        
+
         window.debugShowSecurityPanel = () => {
             const securityActivation = document.getElementById('securityActivation');
             if (securityActivation) {
@@ -1341,7 +1366,7 @@ class CCTVViewer {
 
         // Send to camera
         this.updateCameraAlertSettings(settings);
-        
+
         // Close dialog
         const dialog = document.getElementById('alertSettingsDialog');
         if (dialog) {
@@ -1357,7 +1382,7 @@ class CCTVViewer {
     // Activate security alerts with default settings
     activateSecurityAlerts() {
         console.log('🚀 activateSecurityAlerts() called - currentCamera:', this.currentCamera);
-        
+
         if (!this.currentCamera) {
             alert('Please connect to a camera first');
             return;
@@ -1386,10 +1411,10 @@ class CCTVViewer {
 
         // Send to camera
         this.updateCameraAlertSettings(defaultSettings);
-        
+
         // Update UI immediately
         this.updateSecurityActivationUI(true);
-        
+
         // Reset button after delay
         setTimeout(() => {
             if (activateBtn) {
@@ -1404,7 +1429,7 @@ class CCTVViewer {
     // Deactivate security alerts
     deactivateSecurityAlerts() {
         console.log('⏹️ deactivateSecurityAlerts() called - currentCamera:', this.currentCamera);
-        
+
         if (!this.currentCamera) {
             alert('Please connect to a camera first');
             return;
@@ -1433,10 +1458,10 @@ class CCTVViewer {
 
         // Send to camera
         this.updateCameraAlertSettings(disableSettings);
-        
+
         // Update UI immediately
         this.updateSecurityActivationUI(false);
-        
+
         // Reset button after delay
         setTimeout(() => {
             if (deactivateBtn) {
@@ -1453,20 +1478,20 @@ class CCTVViewer {
         const activationStatus = document.getElementById('activationStatus');
         const activateBtn = document.getElementById('activateSecurityBtn');
         const deactivateBtn = document.getElementById('deactivateSecurityBtn');
-        
+
         if (activationStatus) {
             activationStatus.className = `activation-status ${isActive ? 'active' : 'inactive'}`;
             activationStatus.innerHTML = `<span class="status-text">${isActive ? 'Active' : 'Inactive'}</span>`;
         }
-        
+
         if (activateBtn) {
             activateBtn.style.display = isActive ? 'none' : 'inline-block';
         }
-        
+
         if (deactivateBtn) {
             deactivateBtn.style.display = isActive ? 'inline-block' : 'none';
         }
-        
+
         console.log('🎨 Security activation UI updated - Active:', isActive);
     }
 
@@ -1477,7 +1502,7 @@ class CCTVViewer {
             // Check if this alert type is in cooldown to prevent spam
             const alertKey = `${alertData.type}_${alertData.roomId}`;
             const now = Date.now();
-            
+
             if (this.alertCooldowns.has(alertKey)) {
                 const lastAlert = this.alertCooldowns.get(alertKey);
                 if (now - lastAlert < this.alertCooldownTime) {
@@ -1485,35 +1510,35 @@ class CCTVViewer {
                     return;
                 }
             }
-            
+
             // Set new cooldown
             this.alertCooldowns.set(alertKey, now);
-            
+
             // Add to alert history
             this.alertHistory.unshift({
                 ...alertData,
                 viewerTimestamp: now
             });
-            
+
             // Limit history size
             if (this.alertHistory.length > this.maxAlertHistory) {
                 this.alertHistory = this.alertHistory.slice(0, this.maxAlertHistory);
             }
-            
+
             // Update alert history UI
             this.updateAlertHistoryUI();
-            
+
             // Show the alert notification
             this.showSecurityAlertNotification(alertData);
-            
+
             // Play alert sound
             this.playAlertSound(alertData.type);
-            
+
             // Update UI with alert indicator
             this.updateAlertIndicator(alertData);
-            
+
             console.log(`🚨 Security alert processed: ${alertData.type} from ${alertData.cameraName}`);
-            
+
         } catch (error) {
             console.error('Error handling security alert:', error);
         }
@@ -1548,27 +1573,52 @@ class CCTVViewer {
 
             // Create a separate peer connection for audio streaming
             this.speakPeerConnection = new RTCPeerConnection({
+                // iceServers: [
+                //     // Local STUN/TURN servers (high priority)
+                //     { urls: 'stun:139.162.61.4:3478' },
+                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                //     // // Google STUN servers (fallback)
+                //     // { urls: 'stun:stun.l.google.com:19302' },
+                //     // { urls: 'stun:stun1.l.google.com:19302' },
+                //     // { urls: 'stun:stun2.l.google.com:19302' },
+                //     // { urls: 'stun:stun3.l.google.com:19302' },
+                //     // { urls: 'stun:stun4.l.google.com:19302' },
+
+                //     // // Additional STUN servers for better reliability
+                //     // { urls: 'stun:stun.services.mozilla.com' },
+                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                //     // // Public TURN servers (last resort)
+                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                // ],
                 iceServers: [
-                    // Local STUN/TURN servers (high priority)
-                    { urls: 'stun:139.162.61.4:3478' },
-                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-                    
-                    // // Google STUN servers (fallback)
-                    // { urls: 'stun:stun.l.google.com:19302' },
-                    // { urls: 'stun:stun1.l.google.com:19302' },
-                    // { urls: 'stun:stun2.l.google.com:19302' },
-                    // { urls: 'stun:stun3.l.google.com:19302' },
-                    // { urls: 'stun:stun4.l.google.com:19302' },
-                    
-                    // // Additional STUN servers for better reliability
-                    // { urls: 'stun:stun.services.mozilla.com' },
-                    // { urls: 'stun:stun.stunprotocol.org:3478' },
-                    
-                    // // Public TURN servers (last resort)
-                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    {
+                        urls: "stun:stun.relay.metered.ca:80",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turn:asia.relay.metered.ca:443",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
+                    {
+                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                        username: "03cf73cc522aa466b88c80a9",
+                        credential: "b8qYtm1kYA9d0/JU",
+                    },
                 ],
                 iceCandidatePoolSize: 10
             });
@@ -1591,7 +1641,7 @@ class CCTVViewer {
             // Handle connection state changes
             this.speakPeerConnection.onconnectionstatechange = () => {
                 console.log('Speak connection state:', this.speakPeerConnection.connectionState);
-                
+
                 switch (this.speakPeerConnection.connectionState) {
                     case 'connected':
                         this.isSpeaking = true;
@@ -1622,7 +1672,7 @@ class CCTVViewer {
         } catch (error) {
             console.error('Error starting speak mode:', error);
             this.updateSpeakStatus('Failed to access microphone', false);
-            
+
             // Show user-friendly error
             if (error.name === 'NotAllowedError') {
                 alert('Microphone access denied. Please allow microphone access to use speak mode.');
@@ -1631,7 +1681,7 @@ class CCTVViewer {
             } else {
                 alert('Failed to start speak mode. Please try again.');
             }
-            
+
             this.cleanupSpeakMode();
         }
     }
