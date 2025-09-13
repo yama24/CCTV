@@ -152,7 +152,7 @@ app.post('/login', async (req, res) => {
             }
             
             const failedAttempts = attempts.filter(attempt => !attempt.success).length;
-            if (failedAttempts >= 5) {
+            if (failedAttempts >= 20) {
                 db.logLoginAttempt({
                     username,
                     ipAddress: clientIP,
@@ -1015,6 +1015,122 @@ io.on('connection', (socket) => {
     });
 
     // ==================== END SECURITY ALERT HANDLERS ====================
+
+    // ==================== SPEAK MODE HANDLERS ====================
+
+    // Handle speak offer from viewer
+    socket.on('speak-offer', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            socket.emit('error', { message: 'Authentication required' });
+            return;
+        }
+        
+        // Verify viewer has access to this camera
+        if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
+            const room = rooms.get(socket.roomId);
+            if (room && room.camera) {
+                io.to(room.camera).emit('speak-offer', {
+                    offer: data.offer,
+                    viewerId: socket.id
+                });
+                console.log(`🎤 Speak offer forwarded from viewer ${socket.id} to camera`);
+            } else {
+                socket.emit('speak-connection-failed', { error: 'Camera not available' });
+            }
+        }
+    });
+
+    // Handle speak answer from camera
+    socket.on('speak-answer', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            socket.emit('error', { message: 'Authentication required' });
+            return;
+        }
+        
+        // Verify camera has permission to send answer
+        if (socket.role === 'camera' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
+            io.to(data.viewerId).emit('speak-answer', {
+                answer: data.answer,
+                sender: socket.id
+            });
+            console.log(`🎤 Speak answer forwarded from camera to viewer ${data.viewerId}`);
+        }
+    });
+
+    // Handle speak ICE candidates
+    socket.on('speak-ice-candidate', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            socket.emit('error', { message: 'Authentication required' });
+            return;
+        }
+        
+        if (socket.role === 'viewer' && socket.roomId) {
+            // Forward ICE candidate from viewer to camera
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
+            const room = rooms.get(socket.roomId);
+            if (room && room.camera) {
+                io.to(room.camera).emit('speak-ice-candidate', {
+                    candidate: data.candidate,
+                    viewerId: socket.id
+                });
+            }
+        } else if (socket.role === 'camera' && socket.roomId) {
+            // Forward ICE candidate from camera to viewer
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
+            io.to(data.viewerId).emit('speak-ice-candidate', {
+                candidate: data.candidate,
+                sender: socket.id
+            });
+        }
+    });
+
+    // Handle speak stop from viewer
+    socket.on('speak-stop', (data) => {
+        if (!socket.user || !socket.user.authenticated) {
+            socket.emit('error', { message: 'Authentication required' });
+            return;
+        }
+        
+        if (socket.role === 'viewer' && socket.roomId) {
+            const cameraInfo = cameras.get(socket.roomId);
+            if (cameraInfo && socket.user.role !== 'admin' && cameraInfo.userId !== socket.user.userId) {
+                socket.emit('error', { message: 'Access denied: Not your camera' });
+                return;
+            }
+            
+            const room = rooms.get(socket.roomId);
+            if (room && room.camera) {
+                io.to(room.camera).emit('speak-stop', {
+                    viewerId: socket.id
+                });
+                console.log(`🎤 Speak stop forwarded from viewer ${socket.id} to camera`);
+            }
+        }
+    });
+
+    // ==================== END SPEAK MODE HANDLERS ====================
 
     // Handle disconnect
     socket.on('disconnect', () => {

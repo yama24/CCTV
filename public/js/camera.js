@@ -52,6 +52,10 @@ class CCTVCamera {
         this.audioAnalyser = null;
         this.audioDataArray = null;
         this.audioDetectionInterval = null;
+
+        // Speak mode (receiving audio from viewers)
+        this.speakPeerConnections = new Map(); // Store connections for receiving audio from viewers
+        this.speakAudioElement = null; // Audio element to play received speech
         
         this.initializeEventListeners();
         this.initializeDefaults();
@@ -458,6 +462,23 @@ class CCTVCamera {
             console.log('Viewer requesting current alert settings');
             this.sendCurrentAlertSettings(data.requesterId);
         });
+
+        // ==================== SPEAK MODE HANDLERS ====================
+
+        this.socket.on('speak-offer', (data) => {
+            console.log('🎤 Received speak offer from viewer');
+            this.handleSpeakOffer(data.offer, data.viewerId);
+        });
+
+        this.socket.on('speak-ice-candidate', (data) => {
+            console.log('🎤 Received speak ICE candidate from viewer');
+            this.handleSpeakIceCandidate(data.candidate, data.viewerId);
+        });
+
+        this.socket.on('speak-stop', (data) => {
+            console.log('🎤 Viewer stopped speaking');
+            this.stopReceivingSpeech(data.viewerId);
+        });
     }
 
     async startCamera() {
@@ -568,6 +589,9 @@ class CCTVCamera {
         // Close all peer connections
         this.peerConnections.forEach(pc => pc.close());
         this.peerConnections.clear();
+
+        // Clean up speak mode connections
+        this.cleanupSpeakMode();
 
         this.startBtn.disabled = false;
         this.stopBtn.disabled = true;
@@ -2788,6 +2812,194 @@ class CCTVCamera {
             this.status.parentNode.insertBefore(helpDiv, this.status.nextSibling);
         }
     }
+
+    // ==================== SPEAK MODE FUNCTIONALITY ====================
+
+    async handleSpeakOffer(offer, viewerId) {
+        try {
+            console.log('🎤 Handling speak offer from viewer:', viewerId);
+
+            // Create peer connection for receiving audio
+            const speakPeerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            });
+
+            this.speakPeerConnections.set(viewerId, speakPeerConnection);
+
+            // Handle incoming audio stream
+            speakPeerConnection.ontrack = (event) => {
+                console.log('🎤 Received audio stream from viewer');
+                this.playReceivedAudio(event.streams[0], viewerId);
+            };
+
+            // Handle ICE candidates
+            speakPeerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.socket.emit('speak-ice-candidate', {
+                        candidate: event.candidate,
+                        viewerId: viewerId
+                    });
+                }
+            };
+
+            // Handle connection state changes
+            speakPeerConnection.onconnectionstatechange = () => {
+                console.log(`🎤 Speak connection state with ${viewerId}:`, speakPeerConnection.connectionState);
+                
+                if (speakPeerConnection.connectionState === 'connected') {
+                    this.updateStatus('🎤 Viewer is speaking', 'connected');
+                } else if (speakPeerConnection.connectionState === 'disconnected' || 
+                          speakPeerConnection.connectionState === 'failed') {
+                    this.stopReceivingSpeech(viewerId);
+                }
+            };
+
+            // Set remote description and create answer
+            await speakPeerConnection.setRemoteDescription(offer);
+            const answer = await speakPeerConnection.createAnswer();
+            await speakPeerConnection.setLocalDescription(answer);
+
+            // Send answer back to viewer
+            this.socket.emit('speak-answer', {
+                answer: answer,
+                viewerId: viewerId
+            });
+
+            console.log('🎤 Speak answer sent to viewer:', viewerId);
+
+        } catch (error) {
+            console.error('Error handling speak offer:', error);
+            this.socket.emit('speak-connection-failed', {
+                viewerId: viewerId,
+                error: error.message
+            });
+        }
+    }
+
+    async handleSpeakIceCandidate(candidate, viewerId) {
+        try {
+            const speakPeerConnection = this.speakPeerConnections.get(viewerId);
+            if (speakPeerConnection) {
+                await speakPeerConnection.addIceCandidate(candidate);
+            }
+        } catch (error) {
+            console.error('Error handling speak ICE candidate:', error);
+        }
+    }
+
+    playReceivedAudio(stream, viewerId) {
+        try {
+            // Create or reuse audio element for this viewer
+            let audioElement = document.getElementById(`speak-audio-${viewerId}`);
+            if (!audioElement) {
+                audioElement = document.createElement('audio');
+                audioElement.id = `speak-audio-${viewerId}`;
+                audioElement.autoplay = true;
+                audioElement.controls = false;
+                audioElement.style.display = 'none';
+                document.body.appendChild(audioElement);
+            }
+
+            audioElement.srcObject = stream;
+            audioElement.volume = 1.0; // Full volume for received speech
+
+            // Add visual indicator
+            this.showSpeechIndicator(viewerId, true);
+
+            console.log(`🎤 Playing audio from viewer ${viewerId}`);
+
+        } catch (error) {
+            console.error('Error playing received audio:', error);
+        }
+    }
+
+    stopReceivingSpeech(viewerId) {
+        try {
+            // Clean up peer connection
+            const speakPeerConnection = this.speakPeerConnections.get(viewerId);
+            if (speakPeerConnection) {
+                speakPeerConnection.close();
+                this.speakPeerConnections.delete(viewerId);
+            }
+
+            // Remove audio element
+            const audioElement = document.getElementById(`speak-audio-${viewerId}`);
+            if (audioElement) {
+                audioElement.srcObject = null;
+                audioElement.remove();
+            }
+
+            // Remove visual indicator
+            this.showSpeechIndicator(viewerId, false);
+
+            // Update status if no more viewers are speaking
+            if (this.speakPeerConnections.size === 0) {
+                this.updateStatus('📹 Camera streaming - Ready for viewers', 'connected');
+            }
+
+            console.log(`🎤 Stopped receiving speech from viewer ${viewerId}`);
+
+        } catch (error) {
+            console.error('Error stopping speech reception:', error);
+        }
+    }
+
+    showSpeechIndicator(viewerId, isReceiving) {
+        // Create or update speech indicator in the UI
+        let indicator = document.getElementById('speech-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'speech-indicator';
+            indicator.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #28a745, #20c997);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: bold;
+                box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+                z-index: 1000;
+                display: none;
+                animation: pulse 1.5s infinite;
+            `;
+            
+            // Add CSS animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.05); opacity: 0.8; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            document.body.appendChild(indicator);
+        }
+
+        if (isReceiving && this.speakPeerConnections.size > 0) {
+            const speakingCount = this.speakPeerConnections.size;
+            indicator.innerHTML = `🎤 ${speakingCount} viewer${speakingCount > 1 ? 's' : ''} speaking`;
+            indicator.style.display = 'block';
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+
+    // Clean up speak mode connections when camera stops
+    cleanupSpeakMode() {
+        this.speakPeerConnections.forEach((connection, viewerId) => {
+            this.stopReceivingSpeech(viewerId);
+        });
+        this.speakPeerConnections.clear();
+    }
+
+    // ==================== END SPEAK MODE FUNCTIONALITY ====================
 }
 
 // Initialize the camera when page loads

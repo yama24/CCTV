@@ -1426,6 +1426,115 @@ button:disabled {
     background: linear-gradient(135deg, #d32f2f 0%, #f44336 100%);
 }
 
+/* Speak Controls Panel Styles */
+.speak-controls {
+    margin-top: 15px;
+    padding: 20px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.speak-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.speak-header h4 {
+    margin: 0;
+    color: #495057;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #bee5eb;
+    padding-bottom: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.speak-status {
+    background: #d1ecf1;
+    color: #0c5460;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #bee5eb;
+    min-width: 60px;
+    text-align: center;
+}
+
+.speak-status.speaking {
+    background: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+    animation: pulse-speak 1.5s infinite;
+}
+
+@keyframes pulse-speak {
+    0%, 100% { 
+        transform: scale(1); 
+        box-shadow: 0 0 0 0 rgba(21, 87, 36, 0.4);
+    }
+    50% { 
+        transform: scale(1.05); 
+        box-shadow: 0 0 0 8px rgba(21, 87, 36, 0);
+    }
+}
+
+.speak-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.speak-btn {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    min-width: 140px;
+}
+
+.speak-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+}
+
+.speak-btn.stop {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.speak-btn.stop:hover {
+    background: linear-gradient(135deg, #c82333 0%, #a02622 100%);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.speak-info {
+    background: #e9f7fd;
+    border: 1px solid #b8daff;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #0c5460;
+    margin: 0;
+}
+
 @media (max-width: 768px) {
     .security-activation {
         padding: 15px;
@@ -1455,5 +1564,23 @@ button:disabled {
         margin: 5px;
         width: auto;
         min-width: 120px;
+    }
+
+    .speak-controls {
+        padding: 15px;
+    }
+    
+    .speak-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .speak-actions {
+        flex-direction: column;
+    }
+    
+    .speak-btn {
+        width: 100%;
     }
 }

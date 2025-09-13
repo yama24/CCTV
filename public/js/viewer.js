@@ -14,6 +14,12 @@ class CCTVViewer {
         this.remoteAudioSelect = document.getElementById('remoteAudioSelect');
         this.refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
         
+        // Speak mode elements
+        this.speakControls = document.getElementById('speakControls');
+        this.startSpeakBtn = document.getElementById('startSpeakBtn');
+        this.stopSpeakBtn = document.getElementById('stopSpeakBtn');
+        this.speakStatus = document.getElementById('speakStatus');
+        
         this.peerConnection = null;
         this.currentCamera = null;
         this.availableCameras = [];
@@ -21,6 +27,11 @@ class CCTVViewer {
         this.isConnected = false;
         this.isConnecting = false;
         this.currentAlertSettings = null;
+        
+        // Speak mode properties
+        this.speakStream = null;
+        this.isSpeaking = false;
+        this.speakPeerConnection = null;
         
         this.initializeEventListeners();
         
@@ -223,6 +234,15 @@ class CCTVViewer {
                 this.requestDeviceSwitch('audio', e.target.value);
             }
         });
+
+        // Speak mode event listeners
+        if (this.startSpeakBtn) {
+            this.startSpeakBtn.addEventListener('click', () => this.startSpeakMode());
+        }
+        
+        if (this.stopSpeakBtn) {
+            this.stopSpeakBtn.addEventListener('click', () => this.stopSpeakMode());
+        }
     }
 
     initializeSocketListeners() {
@@ -366,6 +386,24 @@ class CCTVViewer {
             this.updateSecurityActivationUI(isActive);
         });
 
+        // ==================== SPEAK MODE HANDLERS ====================
+
+        this.socket.on('speak-answer', (data) => {
+            console.log('🎤 Received speak answer from camera');
+            this.handleSpeakAnswer(data.answer);
+        });
+
+        this.socket.on('speak-ice-candidate', (data) => {
+            console.log('🎤 Received speak ICE candidate from camera');
+            this.handleSpeakIceCandidate(data.candidate);
+        });
+
+        this.socket.on('speak-connection-failed', (data) => {
+            console.log('🎤 Speak connection failed:', data.error);
+            this.updateSpeakStatus('Connection failed', false);
+            this.cleanupSpeakMode();
+        });
+
         // Initialize security alerts system
         this.initializeSecurityAlerts();
     }
@@ -482,6 +520,11 @@ class CCTVViewer {
         
         // Show alert controls immediately when connecting
         this.ensureAlertControlsVisible();
+        
+        // Show speak controls when connected to a camera
+        if (this.speakControls) {
+            this.speakControls.style.display = 'block';
+        }
         
         this.renderCameraList(); // Update visual state
         this.updateStatus(`🔄 Connecting to ${camera.name}...`, 'disconnected');
@@ -601,6 +644,11 @@ class CCTVViewer {
     }
 
     disconnect() {
+        // Stop speak mode if active
+        if (this.isSpeaking) {
+            this.stopSpeakMode();
+        }
+        
         if (this.peerConnection) {
             this.peerConnection.close();
             this.peerConnection = null;
@@ -624,6 +672,11 @@ class CCTVViewer {
         
         if (securityActivation) {
             securityActivation.style.display = 'none';
+        }
+
+        // Hide speak controls when disconnecting
+        if (this.speakControls) {
+            this.speakControls.style.display = 'none';
         }
         
         this.renderCameraList();
@@ -1448,6 +1501,180 @@ class CCTVViewer {
     }
 
     // ==================== END SECURITY ALERT SYSTEM ====================
+    // ==================== SPEAK MODE FUNCTIONALITY ====================
+
+    async startSpeakMode() {
+        if (!this.isConnected || !this.currentCamera) {
+            alert('Please connect to a camera first');
+            return;
+        }
+
+        if (this.isSpeaking) {
+            console.log('Already in speak mode');
+            return;
+        }
+
+        try {
+            console.log('🎤 Starting speak mode...');
+            this.updateSpeakStatus('Requesting microphone access...', false);
+
+            // Get microphone stream
+            this.speakStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+
+            // Create a separate peer connection for audio streaming
+            this.speakPeerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            });
+
+            // Add audio tracks to the peer connection
+            this.speakStream.getTracks().forEach(track => {
+                this.speakPeerConnection.addTrack(track, this.speakStream);
+            });
+
+            // Handle ICE candidates for speak mode
+            this.speakPeerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.socket.emit('speak-ice-candidate', {
+                        roomId: this.currentCamera.roomId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            // Handle connection state changes
+            this.speakPeerConnection.onconnectionstatechange = () => {
+                console.log('Speak connection state:', this.speakPeerConnection.connectionState);
+                
+                switch (this.speakPeerConnection.connectionState) {
+                    case 'connected':
+                        this.isSpeaking = true;
+                        this.updateSpeakStatus('Speaking', true);
+                        break;
+                    case 'disconnected':
+                    case 'failed':
+                    case 'closed':
+                        if (this.isSpeaking) {
+                            this.stopSpeakMode();
+                        }
+                        break;
+                }
+            };
+
+            // Create and send speak offer
+            const offer = await this.speakPeerConnection.createOffer();
+            await this.speakPeerConnection.setLocalDescription(offer);
+
+            this.socket.emit('speak-offer', {
+                roomId: this.currentCamera.roomId,
+                offer: offer
+            });
+
+            this.updateSpeakStatus('Connecting...', false);
+            console.log('🎤 Speak offer sent to camera');
+
+        } catch (error) {
+            console.error('Error starting speak mode:', error);
+            this.updateSpeakStatus('Failed to access microphone', false);
+            
+            // Show user-friendly error
+            if (error.name === 'NotAllowedError') {
+                alert('Microphone access denied. Please allow microphone access to use speak mode.');
+            } else if (error.name === 'NotFoundError') {
+                alert('No microphone found. Please connect a microphone to use speak mode.');
+            } else {
+                alert('Failed to start speak mode. Please try again.');
+            }
+            
+            this.cleanupSpeakMode();
+        }
+    }
+
+    stopSpeakMode() {
+        if (!this.isSpeaking && !this.speakStream) {
+            return;
+        }
+
+        console.log('🎤 Stopping speak mode...');
+
+        try {
+            // Stop all audio tracks
+            if (this.speakStream) {
+                this.speakStream.getTracks().forEach(track => {
+                    track.stop();
+                });
+                this.speakStream = null;
+            }
+
+            // Close peer connection
+            if (this.speakPeerConnection) {
+                this.speakPeerConnection.close();
+                this.speakPeerConnection = null;
+            }
+
+            // Notify camera to stop receiving audio
+            if (this.isConnected && this.currentCamera) {
+                this.socket.emit('speak-stop', {
+                    roomId: this.currentCamera.roomId
+                });
+            }
+
+            this.cleanupSpeakMode();
+            console.log('🎤 Speak mode stopped');
+
+        } catch (error) {
+            console.error('Error stopping speak mode:', error);
+            this.cleanupSpeakMode();
+        }
+    }
+
+    cleanupSpeakMode() {
+        this.isSpeaking = false;
+        this.updateSpeakStatus('Ready', false);
+    }
+
+    updateSpeakStatus(message, isSpeaking) {
+        if (this.speakStatus) {
+            this.speakStatus.className = `speak-status ${isSpeaking ? 'speaking' : ''}`;
+            this.speakStatus.innerHTML = `<span class="status-text">${message}</span>`;
+        }
+
+        if (this.startSpeakBtn && this.stopSpeakBtn) {
+            this.startSpeakBtn.style.display = isSpeaking ? 'none' : 'inline-block';
+            this.stopSpeakBtn.style.display = isSpeaking ? 'inline-block' : 'none';
+        }
+    }
+
+    handleSpeakAnswer(answer) {
+        try {
+            if (this.speakPeerConnection) {
+                this.speakPeerConnection.setRemoteDescription(answer);
+                console.log('🎤 Speak answer processed');
+            }
+        } catch (error) {
+            console.error('Error handling speak answer:', error);
+        }
+    }
+
+    async handleSpeakIceCandidate(candidate) {
+        try {
+            if (this.speakPeerConnection) {
+                await this.speakPeerConnection.addIceCandidate(candidate);
+            }
+        } catch (error) {
+            console.error('Error handling speak ICE candidate:', error);
+        }
+    }
+
+    // ==================== END SPEAK MODE FUNCTIONALITY ====================
 }
 
 // Initialize the viewer when page loads
