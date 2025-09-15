@@ -614,53 +614,53 @@ class CCTVCamera {
             }
 
             const peerConnection = new RTCPeerConnection({
-                // iceServers: [
-                //     // Local STUN/TURN servers (high priority)
-                //     { urls: 'stun:139.162.61.4:3478' },
-                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-
-                //     // // Google STUN servers (fallback)
-                //     // { urls: 'stun:stun.l.google.com:19302' },
-                //     // { urls: 'stun:stun1.l.google.com:19302' },
-                //     // { urls: 'stun:stun2.l.google.com:19302' },
-                //     // { urls: 'stun:stun3.l.google.com:19302' },
-                //     // { urls: 'stun:stun4.l.google.com:19302' },
-
-                //     // // Additional STUN servers for better reliability
-                //     // { urls: 'stun:stun.services.mozilla.com' },
-                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
-
-                //     // // Public TURN servers (last resort)
-                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-                // ],
                 iceServers: [
-                    {
-                        urls: "stun:stun.relay.metered.ca:80",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:80",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:443",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
+                    // Local STUN/TURN servers (high priority)
+                    { urls: 'stun:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                    // // Google STUN servers (fallback)
+                    // { urls: 'stun:stun.l.google.com:19302' },
+                    // { urls: 'stun:stun1.l.google.com:19302' },
+                    // { urls: 'stun:stun2.l.google.com:19302' },
+                    // { urls: 'stun:stun3.l.google.com:19302' },
+                    // { urls: 'stun:stun4.l.google.com:19302' },
+
+                    // // Additional STUN servers for better reliability
+                    // { urls: 'stun:stun.services.mozilla.com' },
+                    // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                    // // Public TURN servers (last resort)
+                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
                 ],
+                // iceServers: [
+                //     {
+                //         urls: "stun:stun.relay.metered.ca:80",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:80",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:443",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                // ],
                 iceCandidatePoolSize: 10
             });
 
@@ -2865,53 +2865,53 @@ class CCTVCamera {
 
             // Create peer connection for receiving audio
             const speakPeerConnection = new RTCPeerConnection({
-                // iceServers: [
-                //     // Local STUN/TURN servers (high priority)
-                //     { urls: 'stun:139.162.61.4:3478' },
-                //     { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
-                //     { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
-
-                //     // // Google STUN servers (fallback)
-                //     // { urls: 'stun:stun.l.google.com:19302' },
-                //     // { urls: 'stun:stun1.l.google.com:19302' },
-                //     // { urls: 'stun:stun2.l.google.com:19302' },
-                //     // { urls: 'stun:stun3.l.google.com:19302' },
-                //     // { urls: 'stun:stun4.l.google.com:19302' },
-
-                //     // // Additional STUN servers for better reliability
-                //     // { urls: 'stun:stun.services.mozilla.com' },
-                //     // { urls: 'stun:stun.stunprotocol.org:3478' },
-
-                //     // // Public TURN servers (last resort)
-                //     // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                //     // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                //     // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-                // ],
                 iceServers: [
-                    {
-                        urls: "stun:stun.relay.metered.ca:80",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:80",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:80?transport=tcp",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turn:asia.relay.metered.ca:443",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
-                    {
-                        urls: "turns:asia.relay.metered.ca:443?transport=tcp",
-                        username: "03cf73cc522aa466b88c80a9",
-                        credential: "b8qYtm1kYA9d0/JU",
-                    },
+                    // Local STUN/TURN servers (high priority)
+                    { urls: 'stun:139.162.61.4:3478' },
+                    { urls: 'turn:139.162.61.4:3478', username: 'yama', credential: 'Muhammad' },
+                    { urls: 'turn:139.162.61.4:3479', username: 'yama', credential: 'Muhammad' },
+
+                    // // Google STUN servers (fallback)
+                    // { urls: 'stun:stun.l.google.com:19302' },
+                    // { urls: 'stun:stun1.l.google.com:19302' },
+                    // { urls: 'stun:stun2.l.google.com:19302' },
+                    // { urls: 'stun:stun3.l.google.com:19302' },
+                    // { urls: 'stun:stun4.l.google.com:19302' },
+
+                    // // Additional STUN servers for better reliability
+                    // { urls: 'stun:stun.services.mozilla.com' },
+                    // { urls: 'stun:stun.stunprotocol.org:3478' },
+
+                    // // Public TURN servers (last resort)
+                    // { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    // { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    // { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
                 ],
+                // iceServers: [
+                //     {
+                //         urls: "stun:stun.relay.metered.ca:80",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:80",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:80?transport=tcp",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turn:asia.relay.metered.ca:443",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                //     {
+                //         urls: "turns:asia.relay.metered.ca:443?transport=tcp",
+                //         username: "03cf73cc522aa466b88c80a9",
+                //         credential: "b8qYtm1kYA9d0/JU",
+                //     },
+                // ],
                 iceCandidatePoolSize: 10
             });
 
